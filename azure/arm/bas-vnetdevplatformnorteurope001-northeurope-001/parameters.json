@@ -1,0 +1,15 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "bastionHosts_bas_vnetdevplatformnorteurope001_northeurope_001_name": {
+            "value": null
+        },
+        "publicIPAddresses_pip_bas_vnetdevplatformnortheurope001_northeurope_001_externalid": {
+            "value": null
+        },
+        "virtualNetworks_vnet_dev_platform_northeurope_001_externalid": {
+            "value": null
+        }
+    }
+}

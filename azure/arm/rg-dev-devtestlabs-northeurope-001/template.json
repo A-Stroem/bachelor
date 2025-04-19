@@ -1,0 +1,484 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vaults_dtldevbachelorbba22058_name": {
+            "defaultValue": "dtldevbachelorbba22058",
+            "type": "String"
+        },
+        "vaults_dtldevbachelornorthe1301_name": {
+            "defaultValue": "dtldevbachelornorthe1301",
+            "type": "String"
+        },
+        "storageAccounts_adtldevbachelornor9465_name": {
+            "defaultValue": "adtldevbachelornor9465",
+            "type": "String"
+        },
+        "labs_dtl_dev_bachelor_northeurope_001_name": {
+            "defaultValue": "dtl-dev-bachelor-northeurope-001",
+            "type": "String"
+        },
+        "virtualNetworks_vnet_dev_platform_northeurope_001_externalid": {
+            "defaultValue": "/subscriptions/2932420b-651c-46e5-9b10-acb8bad1ee56/resourceGroups/rg-shared-networking-northeurope-001/providers/Microsoft.Network/virtualNetworks/vnet-dev-platform-northeurope-001",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "microsoft.devtestlab/labs",
+            "apiVersion": "2018-09-15",
+            "name": "[parameters('labs_dtl_dev_bachelor_northeurope_001_name')]",
+            "location": "northeurope",
+            "tags": {
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor",
+                "CreatedBy": "Anders"
+            },
+            "properties": {
+                "labStorageType": "Premium",
+                "mandatoryArtifactsResourceIdsLinux": [],
+                "mandatoryArtifactsResourceIdsWindows": [],
+                "premiumDataDisks": "Disabled",
+                "environmentPermission": "Reader",
+                "announcement": {
+                    "enabled": "Disabled",
+                    "expired": false
+                },
+                "support": {
+                    "enabled": "Disabled"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[parameters('vaults_dtldevbachelorbba22058_name')]",
+            "location": "northeurope",
+            "tags": {
+                "hidden-DevTestLabs-LabUId": "89b11575-d6b9-4b12-8e79-9bcdbe3854bb",
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor",
+                "CreatedBy": "DevTestLabs"
+            },
+            "properties": {
+                "sku": {
+                    "family": "A",
+                    "name": "standard"
+                },
+                "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                "accessPolicies": [
+                    {
+                        "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                        "objectId": "bba28e22-f9bd-43d7-8c16-904c13d0b5cc",
+                        "permissions": {
+                            "secrets": [
+                                "all"
+                            ]
+                        }
+                    },
+                    {
+                        "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                        "objectId": "7c3c2faa-ec80-4f39-921b-11d999ccc5e2",
+                        "permissions": {
+                            "secrets": [
+                                "all"
+                            ]
+                        }
+                    },
+                    {
+                        "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                        "objectId": "74ca6051-da2b-4f0e-a8e5-eb003e586ec7",
+                        "permissions": {
+                            "secrets": [
+                                "all"
+                            ]
+                        }
+                    }
+                ],
+                "enabledForDeployment": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 7,
+                "enablePurgeProtection": true,
+                "vaultUri": "[concat('https://', parameters('vaults_dtldevbachelorbba22058_name'), '.vault.azure.net/')]",
+                "provisioningState": "Succeeded",
+                "publicNetworkAccess": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[parameters('vaults_dtldevbachelornorthe1301_name')]",
+            "location": "northeurope",
+            "tags": {
+                "hidden-DevTestLabs-LabUId": "89b11575-d6b9-4b12-8e79-9bcdbe3854bb",
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor",
+                "CreatedBy": "DevTestLabs"
+            },
+            "properties": {
+                "sku": {
+                    "family": "A",
+                    "name": "standard"
+                },
+                "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                "accessPolicies": [
+                    {
+                        "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                        "objectId": "7c3c2faa-ec80-4f39-921b-11d999ccc5e2",
+                        "permissions": {
+                            "secrets": [
+                                "all"
+                            ]
+                        }
+                    },
+                    {
+                        "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                        "objectId": "74ca6051-da2b-4f0e-a8e5-eb003e586ec7",
+                        "permissions": {
+                            "secrets": [
+                                "all"
+                            ]
+                        }
+                    }
+                ],
+                "enabledForDeployment": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 7,
+                "enablePurgeProtection": true,
+                "vaultUri": "[concat('https://', parameters('vaults_dtldevbachelornorthe1301_name'), '.vault.azure.net/')]",
+                "provisioningState": "Succeeded",
+                "publicNetworkAccess": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2024-01-01",
+            "name": "[parameters('storageAccounts_adtldevbachelornor9465_name')]",
+            "location": "northeurope",
+            "tags": {
+                "hidden-DevTestLabs-LabUId": "89b11575-d6b9-4b12-8e79-9bcdbe3854bb",
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor",
+                "CreatedBy": "Anders"
+            },
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "defaultToOAuthAuthentication": false,
+                "allowCrossTenantReplication": false,
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": true,
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "accessTier": "Hot"
+            }
+        },
+        {
+            "type": "microsoft.devtestlab/labs/artifactsources",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/public environment repo')]",
+            "dependsOn": [
+                "[resourceId('microsoft.devtestlab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "displayName": "Public Environment Repo",
+                "uri": "https://github.com/Azure/azure-devtestlab.git",
+                "sourceType": "GitHub",
+                "armTemplateFolderPath": "/Environments",
+                "branchRef": "master",
+                "status": "Enabled"
+            }
+        },
+        {
+            "type": "microsoft.devtestlab/labs/artifactsources",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/public repo')]",
+            "dependsOn": [
+                "[resourceId('microsoft.devtestlab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "displayName": "Public Artifact Repo",
+                "uri": "https://github.com/Azure/azure-devtestlab.git",
+                "sourceType": "GitHub",
+                "folderPath": "/Artifacts",
+                "branchRef": "master",
+                "status": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.DevTestLab/labs/notificationChannels",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/AutoShutdown')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.DevTestLab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "emailRecipient": "ande72h3@stud.kea.dk",
+                "description": "This option will send notifications to the specified email address and/or webhook URL before auto-shutdown of virtual machines occurs.",
+                "events": [
+                    {
+                        "eventName": "AutoShutdown"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "microsoft.devtestlab/labs/schedules",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/labvmsshutdown')]",
+            "location": "northeurope",
+            "dependsOn": [
+                "[resourceId('microsoft.devtestlab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "status": "Enabled",
+                "taskType": "LabVmsShutdownTask",
+                "dailyRecurrence": {
+                    "time": "0100"
+                },
+                "timeZoneId": "Romance Standard Time",
+                "notificationSettings": {
+                    "status": "Enabled",
+                    "timeInMinutes": 30
+                }
+            }
+        },
+        {
+            "type": "microsoft.devtestlab/labs/virtualnetworks",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/vnet-dev-platform-northeurope-001')]",
+            "dependsOn": [
+                "[resourceId('microsoft.devtestlab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "allowedSubnets": [
+                    {
+                        "resourceId": "[concat(parameters('virtualNetworks_vnet_dev_platform_northeurope_001_externalid'), '/subnets/snet-devtestlabs-001')]",
+                        "labSubnetName": "snet-devtestlabs-001",
+                        "allowPublicIp": "Allow"
+                    }
+                ],
+                "externalProviderResourceId": "[parameters('virtualNetworks_vnet_dev_platform_northeurope_001_externalid')]",
+                "subnetOverrides": [
+                    {
+                        "resourceId": "[concat(parameters('virtualNetworks_vnet_dev_platform_northeurope_001_externalid'), '/subnets/snet-devtestlabs-001')]",
+                        "labSubnetName": "snet-devtestlabs-001",
+                        "useInVmCreationPermission": "Allow",
+                        "usePublicIpAddressPermission": "Allow",
+                        "sharedPublicIpAddressConfiguration": {
+                            "allowedPorts": [
+                                {
+                                    "transportProtocol": "Tcp",
+                                    "backendPort": 3389
+                                },
+                                {
+                                    "transportProtocol": "Tcp",
+                                    "backendPort": 22
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_dtldevbachelorbba22058_name'), '/VmPassword')]",
+            "location": "northeurope",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_dtldevbachelorbba22058_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices",
+            "apiVersion": "2024-01-01",
+            "name": "[concat(parameters('storageAccounts_adtldevbachelornor9465_name'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_adtldevbachelornor9465_name'))]"
+            ],
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                    "allowPermanentDelete": false,
+                    "enabled": false
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/fileServices",
+            "apiVersion": "2024-01-01",
+            "name": "[concat(parameters('storageAccounts_adtldevbachelornor9465_name'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_adtldevbachelornor9465_name'))]"
+            ],
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "protocolSettings": {
+                    "smb": {}
+                },
+                "cors": {
+                    "corsRules": []
+                },
+                "shareDeleteRetentionPolicy": {
+                    "enabled": true,
+                    "days": 7
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/queueServices",
+            "apiVersion": "2024-01-01",
+            "name": "[concat(parameters('storageAccounts_adtldevbachelornor9465_name'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_adtldevbachelornor9465_name'))]"
+            ],
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/tableServices",
+            "apiVersion": "2024-01-01",
+            "name": "[concat(parameters('storageAccounts_adtldevbachelornor9465_name'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_adtldevbachelornor9465_name'))]"
+            ],
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                }
+            }
+        },
+        {
+            "type": "microsoft.devtestlab/labs/users",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/bba28e22-f9bd-43d7-8c16-904c13d0b5cc')]",
+            "dependsOn": [
+                "[resourceId('microsoft.devtestlab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]",
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_dtldevbachelorbba22058_name'))]"
+            ],
+            "properties": {
+                "identity": {
+                    "tenantId": "d10c3c6e-c228-4944-8b6a-6067c6afe3c9",
+                    "objectId": "bba28e22-f9bd-43d7-8c16-904c13d0b5cc",
+                    "appId": "1a14be2a-e903-4cec-99cf-b2e209259a0f"
+                },
+                "secretStore": {
+                    "keyVaultUri": "https://dtldevbachelorbba22058.vault.azure.net/",
+                    "keyVaultId": "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_dtldevbachelorbba22058_name'))]"
+                }
+            }
+        },
+        {
+            "type": "microsoft.devtestlab/labs/users/secrets",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/bba28e22-f9bd-43d7-8c16-904c13d0b5cc/vmpassword')]",
+            "dependsOn": [
+                "[resourceId('microsoft.devtestlab/labs/users', parameters('labs_dtl_dev_bachelor_northeurope_001_name'), 'bba28e22-f9bd-43d7-8c16-904c13d0b5cc')]",
+                "[resourceId('microsoft.devtestlab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]"
+            ],
+            "properties": {}
+        },
+        {
+            "type": "microsoft.devtestlab/labs/virtualmachines",
+            "apiVersion": "2018-09-15",
+            "name": "[concat(parameters('labs_dtl_dev_bachelor_northeurope_001_name'), '/winsrv-dc01')]",
+            "location": "northeurope",
+            "dependsOn": [
+                "[resourceId('microsoft.devtestlab/labs', parameters('labs_dtl_dev_bachelor_northeurope_001_name'))]",
+                "[resourceId('microsoft.devtestlab/labs/virtualnetworks', parameters('labs_dtl_dev_bachelor_northeurope_001_name'), 'vnet-dev-platform-northeurope-001')]"
+            ],
+            "tags": {
+                "CreatedBy": "Anders",
+                "CreationDate": "2025-04-19",
+                "Environment": "Development",
+                "Project": "Bachelor"
+            },
+            "properties": {
+                "notes": "[smalldisk] Windows Server 2022 Datacenter - x64 Gen2",
+                "createdDate": "2025-04-19T18:38:41.2573698+00:00",
+                "size": "Standard_B2ls_v2",
+                "userName": "chewbacca",
+                "isAuthenticationWithSshKey": false,
+                "labSubnetName": "snet-devtestlabs-001",
+                "labVirtualNetworkId": "[resourceId('microsoft.devtestlab/labs/virtualnetworks', parameters('labs_dtl_dev_bachelor_northeurope_001_name'), 'vnet-dev-platform-northeurope-001')]",
+                "disallowPublicIpAddress": true,
+                "galleryImageReference": {
+                    "offer": "WindowsServer",
+                    "publisher": "MicrosoftWindowsServer",
+                    "sku": "2022-datacenter-smalldisk-g2",
+                    "osType": "Windows",
+                    "version": "latest"
+                },
+                "networkInterface": {},
+                "allowClaim": true,
+                "storageType": "StandardSSD"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2024-01-01",
+            "name": "[concat(parameters('storageAccounts_adtldevbachelornor9465_name'), '/default/artifacts')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_adtldevbachelornor9465_name'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_adtldevbachelornor9465_name'))]"
+            ],
+            "properties": {
+                "immutableStorageWithVersioning": {
+                    "enabled": false
+                },
+                "defaultEncryptionScope": "$account-encryption-key",
+                "denyEncryptionScopeOverride": false,
+                "publicAccess": "None"
+            }
+        }
+    ]
+}

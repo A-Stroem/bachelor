@@ -1,0 +1,108 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "labName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the DevTest Lab. Provided by the Lab environment."
+      }
+    },
+    "vmName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name for the new virtual machine."
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_B2ls_v2", 
+      "allowedValues": [ 
+        "Standard_B2ls_v2",
+        "Standard_DS1_v2",
+        "Standard_D2s_v3",
+        "Standard_B2ms"
+      ],
+      "metadata": {
+        "description": "Specifies the size of the virtual machine."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "localadmin", 
+      "metadata": {
+        "description": "Username for the Virtual Machine administrator account."
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "defaultValue": "[[[user/VmPassword]]]",
+      "metadata": {
+        "description": "Password for the Virtual Machine administrator account. Uses Lab user's default or prompts if not set."
+      }
+    },
+
+    "artifact_GitInstall_InstallLocation": {
+       "type": "string",
+       "defaultValue": "C:\\Program Files\\Git",
+       "metadata": {
+         "description": "Installation path for Git (used by the 'windows-git' artifact)."
+       }
+    }
+
+  },
+  "variables": {
+
+    "labVirtualNetworkName": "vnet-dev-platform-northeurope-001", 
+    "labSubnetName": "snet-devtestlabs-001",
+    "labVirtualNetworkId": "[resourceId('Microsoft.DevTestLab/labs/virtualnetworks', parameters('labName'), variables('labVirtualNetworkName'))]",
+    "publicArtifactRepoName": "Public Artifact Repo"
+   
+  },
+  "resources": [
+    {
+      "apiVersion": "2018-09-15", 
+      "type": "Microsoft.DevTestLab/labs/virtualmachines",
+      "name": "[parameters('vmName')]",
+      "properties": {
+        "galleryImageReference": {
+          "publisher": "MicrosoftWindowsServer",
+          "offer": "WindowsServer",
+          "sku": "2022-datacenter-smalldisk-g2", 
+          "osType": "Windows",
+          "version": "latest" 
+        },
+
+        "size": "[parameters('vmSize')]",
+        "userName": "[parameters('adminUsername')]",
+        "password": "[parameters('adminPassword')]",
+        "isAuthenticationWithSshKey": false,
+
+        "labVirtualNetworkId": "[variables('labVirtualNetworkId')]",
+        "labSubnetName": "[variables('labSubnetName')]",
+        "disallowPublicIpAddress": true, 
+
+        "storageType": "StandardSSD_LRS",
+
+        "artifacts": [
+          {
+            "artifactId": "[resourceId('Microsoft.DevTestLab/labs/artifactSources/artifacts', parameters('labName'), variables('publicArtifactRepoName'), 'windows-git')]",
+            "parameters": [
+              {
+                "name": "installLocation", 
+                "value": "[parameters('artifact_GitInstall_InstallLocation')]"
+              }
+            ]
+          },
+          {
+             "artifactId": "[resourceId('Microsoft.DevTestLab/labs/artifactSources/artifacts', parameters('labName'), variables('publicArtifactRepoName'), 'windows-chrome')]"
+          }
+        ],
+
+        "allowClaim": false, 
+        "notes": "Windows Server 2022 Datacenter - Base Formula with Git" 
+      }
+    }
+  ],
+  "outputs": {}
+}

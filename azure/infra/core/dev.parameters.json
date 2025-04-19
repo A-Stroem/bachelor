@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "dev"
+    },
+    "projectName": {
+      "value": "bachelor"
+    },
+    "instanceNumber": {
+      "value": 2
+    },
+    "vnetAddressPrefix": {
+      "value": "10.1.0.0/16"
+    },
+    "devTestSubnetAddressPrefix": {
+      "value": "10.1.1.0/24"
+    },
+    "bastionSubnetAddressPrefix": {
+      "value": "10.1.255.0/26"
+    },
+    "bastionSkuName": {
+      "value": "Standard"
+    }
+  }
+}

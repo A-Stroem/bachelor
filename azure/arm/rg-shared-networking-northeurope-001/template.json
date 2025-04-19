@@ -1,0 +1,277 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "networkSecurityGroups_nsg_bastion_001_name": {
+            "defaultValue": "nsg-bastion-001",
+            "type": "String"
+        },
+        "virtualNetworks_vnet_dev_platform_northeurope_001_name": {
+            "defaultValue": "vnet-dev-platform-northeurope-001",
+            "type": "String"
+        },
+        "bastionHosts_bas_vnetdevplatformnorteurope001_northeurope_001_name": {
+            "defaultValue": "bas-vnetdevplatformnorteurope001-northeurope-001",
+            "type": "String"
+        },
+        "publicIPAddresses_pip_bas_vnetdevplatformnortheurope001_northeurope_001_name": {
+            "defaultValue": "pip-bas-vnetdevplatformnortheurope001-northeurope-001",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2024-05-01",
+            "name": "[parameters('networkSecurityGroups_nsg_bastion_001_name')]",
+            "location": "northeurope",
+            "tags": {
+                "CreatedBy": "Anders",
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor"
+            },
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "AllowSSHRDPOutbound",
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_nsg_bastion_001_name'), 'AllowSSHRDPOutbound')]",
+                        "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+                        "properties": {
+                            "description": "Allow SHH and RDP connections",
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "VirtualNetwork",
+                            "access": "Allow",
+                            "priority": 100,
+                            "direction": "Outbound",
+                            "sourcePortRanges": [],
+                            "destinationPortRanges": [
+                                "22",
+                                "3389"
+                            ],
+                            "sourceAddressPrefixes": [],
+                            "destinationAddressPrefixes": []
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2024-05-01",
+            "name": "[parameters('publicIPAddresses_pip_bas_vnetdevplatformnortheurope001_northeurope_001_name')]",
+            "location": "northeurope",
+            "tags": {
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor"
+            },
+            "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+            },
+            "zones": [
+                "2",
+                "1",
+                "3"
+            ],
+            "properties": {
+                "ipAddress": "132.164.246.111",
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static",
+                "idleTimeoutInMinutes": 4,
+                "ipTags": []
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2024-05-01",
+            "name": "[parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name')]",
+            "location": "northeurope",
+            "tags": {
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor"
+            },
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "10.1.0.0/16"
+                    ]
+                },
+                "encryption": {
+                    "enabled": false,
+                    "enforcement": "AllowUnencrypted"
+                },
+                "privateEndpointVNetPolicies": "Disabled",
+                "subnets": [
+                    {
+                        "name": "default",
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), 'default')]",
+                        "properties": {
+                            "addressPrefixes": [
+                                "10.1.0.0/24"
+                            ],
+                            "delegations": [],
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled"
+                        },
+                        "type": "Microsoft.Network/virtualNetworks/subnets"
+                    },
+                    {
+                        "name": "snet-devtestlabs-001",
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), 'snet-devtestlabs-001')]",
+                        "properties": {
+                            "addressPrefixes": [
+                                "10.1.1.0/24"
+                            ],
+                            "delegations": [],
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled"
+                        },
+                        "type": "Microsoft.Network/virtualNetworks/subnets"
+                    },
+                    {
+                        "name": "AzureBastionSubnet",
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), 'AzureBastionSubnet')]",
+                        "properties": {
+                            "addressPrefixes": [
+                                "10.1.255.0/26"
+                            ],
+                            "delegations": [],
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled"
+                        },
+                        "type": "Microsoft.Network/virtualNetworks/subnets"
+                    }
+                ],
+                "virtualNetworkPeerings": [],
+                "enableDdosProtection": false
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+            "apiVersion": "2024-05-01",
+            "name": "[concat(parameters('networkSecurityGroups_nsg_bastion_001_name'), '/AllowSSHRDPOutbound')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_bastion_001_name'))]"
+            ],
+            "properties": {
+                "description": "Allow SHH and RDP connections",
+                "protocol": "*",
+                "sourcePortRange": "*",
+                "sourceAddressPrefix": "*",
+                "destinationAddressPrefix": "VirtualNetwork",
+                "access": "Allow",
+                "priority": 100,
+                "direction": "Outbound",
+                "sourcePortRanges": [],
+                "destinationPortRanges": [
+                    "22",
+                    "3389"
+                ],
+                "sourceAddressPrefixes": [],
+                "destinationAddressPrefixes": []
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks/subnets",
+            "apiVersion": "2024-05-01",
+            "name": "[concat(parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), '/AzureBastionSubnet')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "addressPrefixes": [
+                    "10.1.255.0/26"
+                ],
+                "delegations": [],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks/subnets",
+            "apiVersion": "2024-05-01",
+            "name": "[concat(parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "addressPrefixes": [
+                    "10.1.0.0/24"
+                ],
+                "delegations": [],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks/subnets",
+            "apiVersion": "2024-05-01",
+            "name": "[concat(parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), '/snet-devtestlabs-001')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'))]"
+            ],
+            "properties": {
+                "addressPrefixes": [
+                    "10.1.1.0/24"
+                ],
+                "delegations": [],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Network/bastionHosts",
+            "apiVersion": "2024-05-01",
+            "name": "[parameters('bastionHosts_bas_vnetdevplatformnorteurope001_northeurope_001_name')]",
+            "location": "northeurope",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPAddresses_pip_bas_vnetdevplatformnortheurope001_northeurope_001_name'))]",
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), 'AzureBastionSubnet')]"
+            ],
+            "tags": {
+                "CreationDate": "2025-04-19",
+                "DataClassification": "Internal",
+                "Environment": "Development",
+                "Project": "Bachelor"
+            },
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "dnsName": "bst-67fc48cd-6e2a-4f67-aad7-0ec6bdc1c563.bastion.azure.com",
+                "scaleUnits": 2,
+                "enableTunneling": false,
+                "enableIpConnect": true,
+                "disableCopyPaste": false,
+                "enableShareableLink": true,
+                "enableKerberos": false,
+                "enableSessionRecording": false,
+                "enablePrivateOnlyBastion": false,
+                "ipConfigurations": [
+                    {
+                        "name": "IpConf",
+                        "id": "[concat(resourceId('Microsoft.Network/bastionHosts', parameters('bastionHosts_bas_vnetdevplatformnorteurope001_northeurope_001_name')), '/bastionHostIpConfigurations/IpConf')]",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPAddresses_pip_bas_vnetdevplatformnortheurope001_northeurope_001_name'))]"
+                            },
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_dev_platform_northeurope_001_name'), 'AzureBastionSubnet')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}
