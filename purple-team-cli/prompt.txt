@@ -1,0 +1,70 @@
+
+1. Goal:
+Develop a functional, command-line interface (CLI) based purple team tool (POC/MVP) designed to facilitate adversary emulation using the Atomic Red Team (ART) library. The tool will serve as an orchestrator for executing ART tests within a controlled lab environment.
+
+2. Target Audience:
+Cybersecurity students and practitioners seeking a straightforward tool to execute Atomic Red Team tests for learning, training, and basic security control validation in a lab setting comprising Windows and Linux targets.
+
+3. Core Architecture:
+The tool shall be developed as a dedicated desktop CLI application using Python 3. It will run on the user's machine (Windows, Linux, or macOS) and act as a controller/orchestrator for ART tests.
+
+4. Key Dependencies:
+
+Python 3: The runtime environment for the tool itself.
+PowerShell: Required for executing the underlying execution framework. Specifically, PowerShell 5.0+ on Windows targets/orchestrator, or PowerShell Core (v6+) installed on Linux/macOS targets/orchestrator where Invoke-Atomic is run.   
+Invoke-AtomicRedTeam: The PowerShell module used as the execution engine for ART tests. The tool must assume this module is installed and accessible in the PowerShell environment where commands are executed. Guidance on installing Invoke-AtomicRedTeam must be provided in the documentation.   
+Atomic Red Team Atomics: A local copy of the atomic-red-team/atomics directory containing the test definitions (YAML/Markdown files) is required. The tool needs a way to locate this directory (e.g., via configuration or command-line argument).   
+5. Functional Requirements (Must-Haves):
+
+FR1: Atomic Test Execution (Attack Simulation):
+The tool must provide a CLI command (e.g., purpletool run <TID> [options]) to execute specific Atomic Red Team tests identified by their MITRE ATT&CK Technique ID (e.g., T1053.005) or potentially by test GUID.
+It must invoke the Invoke-AtomicTest PowerShell cmdlet via Python's subprocess module.
+It must support specifying individual test numbers within a technique (e.g., via --test-numbers 1,3).
+It must support triggering prerequisite checks (-CheckPrereqs) and installation (-GetPrereqs) via corresponding Invoke-Atomic flags.
+It must support triggering cleanup (-Cleanup) via the Invoke-Atomic flag.
+It must support local execution (running Invoke-Atomic on the same machine as the Python tool).
+It must support initiating remote execution by constructing the Invoke-AtomicTest command with the -Session parameter (requires pre-established PSSession, guidance provided in docs).
+FR2: Test Output and Context (Blue Team Training Aid):
+The tool must capture stdout and stderr from the Invoke-AtomicTest process.   
+It must display relevant output to the user, including:
+Confirmation of test start/completion.
+Commands executed by the atomic test (if provided by Invoke-Atomic, potentially using -ShowDetailsBrief).
+Success or failure status based on return code and output parsing.
+Error messages from stderr.
+Cleanup commands associated with the test (potentially retrieved via -ShowDetails).
+FR3: Test Environment Setup Guidance:
+The tool distribution must include clear documentation (e.g., README.md) detailing the steps required to set up a minimal test environment compatible with the tool and ART.
+This documentation should cover: VM setup recommendations (Windows/Linux), installation of PowerShell Core (for non-Windows), installation and configuration of Invoke-AtomicRedTeam, obtaining the ART atomics folder, and basic configuration for PowerShell Remoting (WinRM/SSH) if remote testing is desired.
+Optionally, provide simple setup scripts (e.g., Bash, PowerShell) to assist with dependency installation.
+FR4: Red Team Playbook Execution:
+The tool must implement 2-3 predefined, simple "playbooks".
+A playbook consists of a fixed sequence of specific ART test executions (TIDs and potentially specific test numbers).
+A CLI command (e.g., purpletool playbook run <playbook_name>) must allow users to execute an entire playbook sequence.
+FR5: Blue Team Playbook Guidance:
+For each implemented Red Team playbook (FR4), the tool's output or accompanying documentation must provide corresponding Blue Team guidance.
+This guidance should include:
+Expected log sources relevant to the TTPs in the playbook (e.g., Windows Event Log, Sysmon, PowerShell Script Block Logging, Auditd, EDR logs).
+Key indicators or artifacts to look for to detect the simulated activity.
+Basic recommended steps for analysis or initial response.
+FR6: List Available Tests:
+The tool must provide a command (e.g., purpletool list tests [filter]) to list available Atomic Red Team tests.
+This could be achieved by parsing the local atomics directory structure or by invoking Invoke-AtomicTest -ShowDetailsBrief and parsing its output.
+6. Non-Functional Requirements:
+
+NFR1: Usability: The CLI must be designed following usability best practices (clear commands, standard flags, comprehensive help, informative output, robust error handling) as detailed in Section 6. A --help flag must be implemented for the main tool and all subcommands.   
+NFR2: Platform Compatibility: The Python tool itself must be runnable on modern versions of Windows, Linux, and macOS. The orchestrated tests target Windows and Linux systems within the test environment.
+NFR3: Performance: The Python wrapper tool should introduce minimal performance overhead. The overall execution time will be primarily dictated by the performance of Invoke-AtomicRedTeam and the duration of the atomic tests themselves.
+NFR4: Error Handling: The tool must gracefully handle potential errors, including inability to find PowerShell/Invoke-Atomic, failures during subprocess execution, non-zero return codes from Invoke-Atomic, and invalid user input. Error messages should be informative.
+7. Out of Scope for MVP:
+Explicitly excluded features are: A graphical user interface (GUI), full cloud environment automation (e.g., Azure VM deployment), deployment via Docker containers, a dedicated web server/API, and a self-contained portable test environment (e.g., on a USB drive) [User Input].
+
+Roadmap Considerations for v1
+Following the successful development and validation of the MVP, potential enhancements for a v1 release could include:
+
+Graphical User Interface (GUI): Develop a user-friendly GUI (e.g., using PyQt, Tkinter, or potentially reconsidering JavaScript with Electron) to improve ease of use, especially for users less comfortable with CLIs.
+Expanded Playbook Functionality: Allow users to define custom playbooks, perhaps via external YAML or JSON files, supporting more complex logic (e.g., conditional execution).
+Enhanced Reporting: Implement features to generate structured reports (e.g., HTML, JSON, PDF) summarizing test execution details, success/failure status, captured output, and potentially mapping results back to ATT&CK coverage.
+Improved Remote Execution: Integrate more robust handling of remote PowerShell sessions, including secure credential management (e.g., using system keychains or prompting securely) and session establishment/teardown within the tool.
+Results Database: Store test execution history and results in a local database (e.g., SQLite) for tracking progress and comparison over time.
+Chain Reactor Integration: Add the capability to configure, generate (using compose_reaction), transfer, and execute Chain Reactor ELF binaries on Linux targets for specialized Linux simulation.   
+Basic Detection Check: Potentially integrate simple checks against local log files or basic API calls to common security tools (if feasible and APIs are available) to provide rudimentary feedback on whether a test was likely detected.
