@@ -254,6 +254,7 @@ def show_main_menu() -> str:
         "Run Test",
         "List Playbooks",
         "Run Playbook",
+        "Help",
         "Configuration",
         "Exit"
     ]
@@ -918,19 +919,28 @@ def list_playbooks_menu() -> None:
     table.add_column("Name", style="cyan")
     table.add_column("Description")
     
-    # Add rows to the table
-    for i, playbook in enumerate(playbooks, 1):
-        table.add_row(
-            str(i),
-            playbook["name"],
-            playbook["description"]
-        )
+    # Add rows to the table - ensure playbooks is a list and each item is a dictionary
+    if playbooks and isinstance(playbooks, list):
+        for i, playbook in enumerate(playbooks, 1):
+            if isinstance(playbook, dict):
+                name = playbook.get("name", "Unknown")
+                description = playbook.get("description", "")
+                table.add_row(str(i), name, description)
+            else:
+                # Handle non-dictionary items safely
+                table.add_row(str(i), str(playbook) if playbook else "Unknown", "")
     
     # Display the table
     console.print(table)
     
     # Option to view playbook details
     console.print("\n")
+    
+    if not playbooks:
+        console.print("[yellow]No playbooks found.[/yellow]")
+        pause()
+        return
+        
     user_input = Prompt.ask(
         "Enter a playbook number or name to view details, or press Enter to return to the main menu",
         default=""
@@ -942,9 +952,19 @@ def list_playbooks_menu() -> None:
         # Check if input is a number and within valid range
         try:
             index = int(user_input)
-            if 1 <= index <= len(playbooks):
-                playbook_name = playbooks[index-1]["name"]
-                console.print(f"[italic]Selected playbook: {playbook_name}[/italic]")
+            if playbooks and 1 <= index <= len(playbooks):
+                # Make sure we safely access the playbook name
+                if isinstance(playbooks[index-1], dict):
+                    playbook_name = playbooks[index-1].get("name")
+                    if playbook_name:
+                        console.print(f"[italic]Selected playbook: {playbook_name}[/italic]")
+                    else:
+                        console.print("[bold red]Error:[/bold red] Could not get playbook name.")
+                        pause()
+                        return
+                else:
+                    playbook_name = str(playbooks[index-1])
+                    console.print(f"[italic]Selected playbook: {playbook_name}[/italic]")
             else:
                 console.print(f"[bold red]Invalid number. Please enter a number between 1 and {len(playbooks)}.[/bold red]")
                 pause()
@@ -952,6 +972,10 @@ def list_playbooks_menu() -> None:
         except ValueError:
             # Not a number, treat as playbook name
             playbook_name = user_input
+        except Exception as e:
+            console.print(f"[bold red]Error selecting playbook:[/bold red] {str(e)}")
+            pause()
+            return
         
         if playbook_name:
             playbook = get_playbook(playbook_name)
@@ -1309,6 +1333,8 @@ def run_interactive_cli() -> None:
             list_playbooks_menu()
         elif choice == "Run Playbook":
             run_playbook_menu()
+        elif choice == "Help":
+            show_help()
         elif choice == "Configuration":
             configuration_menu()
         elif choice == "Exit":
@@ -1318,6 +1344,28 @@ def run_interactive_cli() -> None:
         else:
             console.print("[bold red]Invalid choice. Please try again.[/bold red]")
             pause()
+
+
+def show_help() -> None:
+    """Display the help screen."""
+    print_header("Help - Purple Team CLI")
+    console.print("""
+Welcome to the Purple Team CLI! This tool allows you to interact with Atomic Red Team tests and playbooks.
+
+[bold cyan]Main Menu Options:[/bold cyan]
+1. [bold]List Tests[/bold] - Browse and search for available Atomic Red Team tests.
+2. [bold]Run Test[/bold] - Execute a specific Atomic Red Team test.
+3. [bold]List Playbooks[/bold] - View available playbooks.
+4. [bold]Run Playbook[/bold] - Execute a specific playbook.
+5. [bold]Help[/bold] - Display this help screen.
+6. [bold]Configuration[/bold] - Configure paths and settings for the CLI.
+7. [bold]Exit[/bold] - Exit the CLI.
+
+For more information, please refer to the documentation or visit the Atomic Red Team repository.
+
+[italic]Press Enter to return to the main menu.[/italic]
+""")
+    pause()
 
 
 if __name__ == "__main__":

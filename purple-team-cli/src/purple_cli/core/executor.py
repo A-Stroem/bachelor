@@ -290,6 +290,7 @@ def list_available_tests(
 def get_test_details(
     technique_id: str,
     show_details: bool = False,
+    test_numbers: Optional[List[int]] = None,
     any_os: bool = False,
 ) -> Tuple[bool, str]:
     """
@@ -298,6 +299,7 @@ def get_test_details(
     Args:
         technique_id: The technique ID to get details for.
         show_details: Whether to show full details (True) or brief details (False).
+        test_numbers: Optional list of specific test numbers to get details for.
         any_os: Whether to include tests for all platforms or just the current one.
 
     Returns:
@@ -308,10 +310,11 @@ def get_test_details(
     # Build the command - always include detail flags for this function
     command = build_command(
         technique_id=technique_id,
+        test_numbers=test_numbers,
         show_details=show_details,
         show_details_brief=not show_details, # If not showing full details, show brief
         any_os=any_os,
-        # Don't include test numbers, prereqs, cleanup, or session for getting details
+        # Don't include prereqs, cleanup, or session for getting details
     )
 
 
