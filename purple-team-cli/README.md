@@ -85,6 +85,10 @@ pip install -r requirements.txt
 
 # Install the package in editable mode
 pip install -e .
+
+# Install pacakges + dev packages
+pip install -e ".[dev]"
+
 ```
 
 ## Configuration

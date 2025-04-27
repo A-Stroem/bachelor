@@ -47,6 +47,9 @@ def run_test(
     show_details_brief: bool = typer.Option(
         True, "--show-details", help="Show details about test execution"
     ),
+    interactive: bool = typer.Option(
+        True, "--interactive/--non-interactive", help="Allow interactive GUI applications to display"
+    ),
 ) -> None:
     """
     Execute a specific Atomic Red Team test by technique ID.
@@ -74,6 +77,9 @@ def run_test(
     if session:
         rprint(f"[bold yellow]Remote Execution:[/bold yellow] Using PowerShell session '{session}'")
     
+    if not interactive:
+        rprint("[bold yellow]Interactive Mode:[/bold yellow] Disabled (output will be captured)")
+    
     success, output = run_atomic_test(
         technique_id=technique_id,
         test_numbers=test_numbers,
@@ -82,11 +88,13 @@ def run_test(
         cleanup=cleanup,
         session=session,
         show_details_brief=show_details_brief,
+        capture_output=not interactive,  # Invert the interactive flag for capture_output
     )
     
     if success:
         rprint("\n[bold green]Test execution completed successfully[/bold green]\n")
-        rprint(output)
+        if not interactive:  # Only print the output if we captured it
+            rprint(output)
     else:
         rprint("\n[bold red]Test execution failed[/bold red]\n")
         rprint(output)

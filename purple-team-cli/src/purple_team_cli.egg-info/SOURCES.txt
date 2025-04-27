@@ -3,6 +3,7 @@ pyproject.toml
 src/purple_cli/__init__.py
 src/purple_cli/__main__.py
 src/purple_cli/cli.py
+src/purple_cli/interactive.py
 src/purple_cli/commands/__init__.py
 src/purple_cli/commands/config.py
 src/purple_cli/commands/list_cmd.py

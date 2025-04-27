@@ -10,6 +10,7 @@ from typing import Optional
 
 from purple_cli import __version__
 from purple_cli.commands import run, config, list_cmd, playbook
+from purple_cli.interactive import run_interactive_cli
 
 
 # Create the main Typer app instance
@@ -39,6 +40,17 @@ def version_cmd() -> None:
     Show the version of the tool.
     """
     rprint(f"[bold green]Purple CLI version:[/bold green] {__version__}")
+
+
+@app.command("interactive")
+def interactive_cmd() -> None:
+    """
+    Launch the interactive menu-driven interface.
+    
+    This mode provides a full-screen menu system for easier navigation
+    and execution of Atomic Red Team tests.
+    """
+    run_interactive_cli()
 
 
 if __name__ == "__main__":
