@@ -161,14 +161,19 @@ Launch PowerShell and run the following commands:
 
 ```powershell
 # Install the Invoke-AtomicRedTeam module
-IEX (IWR 'https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicredteam.ps1' -UseBasicParsing);
-Install-AtomicRedTeam -GetPrereqs -Force
+Install-Module -Name invoke-atomicredteam,powershell-yaml -Scope CurrentUser
 
-# Clone the Atomic Red Team repository
-git clone https://github.com/redcanaryco/atomic-red-team.git
+IEX (IWR 'https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicredteam.ps1' -UseBasicParsing);
+Install-AtomicRedTeam -getAtomics
+
+#Test
+# List atomic tests that can be run from the current platform (Windows,Linux,macOS)
+Invoke-AtomicTest T1003 -ShowDetailsBrief
+
+# List all atomic tests regardless of which platform it can be executed from
+Invoke-AtomicTest T1003 -ShowDetailsBrief -anyOS
 ```
 
-Note the path to the `atomic-red-team/atomics` directory, as you'll need it for configuration.
 
 ### 4. Install the Purple Team CLI
 
@@ -185,9 +190,6 @@ python -m venv venv
 # venv\Scripts\activate
 # On macOS/Linux:
 source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
 
 # Install the package in editable mode
 pip install -e .
