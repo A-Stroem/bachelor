@@ -85,9 +85,6 @@ python -m venv venv
 # On macOS/Linux:
 source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
-
 # Install the package in editable mode
 pip install -e .
 
