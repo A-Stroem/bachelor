@@ -187,3 +187,19 @@ def get_config(config_path: Optional[str] = None) -> AppConfig:
     if _config_instance is None:
         _config_instance = AppConfig(config_path)
     return _config_instance
+
+
+def set_config(key: str, value: Any) -> bool:
+    """
+    Set a configuration value and save it to the config file.
+    
+    Args:
+        key: The configuration key to set.
+        value: The value to set for the configuration key.
+    
+    Returns:
+        True if the configuration was saved successfully, False otherwise.
+    """
+    config = get_config()
+    config.update_setting(key, value)
+    return config.save_config()

@@ -76,12 +76,24 @@ Invoke-AtomicTest T1003 -ShowDetailsBrief -anyOS
 git clone https://github.com/yourusername/purple-team-cli.git
 cd purple-team-cli
 
-# Create a virtual environment (optional but recommended)
+# Create a virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install the package
+# Activate the virtual environment
+# On Windows:
+# venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install the package in editable mode
 pip install -e .
+
+# Install pacakges + dev packages
+pip install -e ".[dev]"
+
 ```
 
 ## Configuration
