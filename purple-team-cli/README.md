@@ -17,6 +17,112 @@ Purple Team CLI is a Python-based orchestrator for executing Atomic Red Team (AR
 
 ## Installation
 
+# Less detailed guide 
+______________________________________________________________
+# Purple Team CLI Installation Guide
+
+## Requirements
+- Python 3.8 or higher
+- PowerShell 5.0+ (Windows) or PowerShell Core 6.0+ (Linux/macOS)
+- Git
+
+## Security Configuration (Windows Only)
+Before installation, configure Windows Security to allow the Atomic Red Team tools:
+
+1. Create a temporary folder: `C:\AtomicRedTeam`
+2. Open Windows Security
+3. Navigate to Virus & Threat Protection → Manage Settings → Exclusions
+4. Add an exclusion for the folder: `C:\AtomicRedTeam`
+5. Add firewall exception for `C:\AtomicRedTeam` folder
+6. Delete the temporary folder so the real one can be installed later
+
+> ⚠️ **Important**: Remember to remove these exclusions after you've finished using the tools.
+
+## Installation Steps
+
+### Step 1: Install Required PowerShell Modules
+Open PowerShell as Administrator and run:
+
+```powershell
+Install-Module -Name invoke-atomicredteam,powershell-yaml -Scope CurrentUser
+```
+
+### Step 2: Install Atomic Red Team
+From the C:\ directory, run:
+
+```powershell
+IEX (IWR 'https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicsfolder.ps1' -UseBasicParsing);
+Install-AtomicsFolder
+```
+
+### Step 3: Clone the Repository
+```powershell
+git clone https://github.com/A-Stroem/bachelor.git
+```
+
+### Step 4: Navigate to Project Directory
+```powershell
+cd bachelor/purple-team-cli
+```
+
+### Step 5: Create a Virtual Environment
+```powershell
+python -m venv venv
+```
+
+### Step 6: Activate the Virtual Environment
+
+**Windows:**
+```powershell
+venv\Scripts\activate
+```
+
+**macOS/Linux:**
+```bash
+source venv/bin/activate
+```
+
+### Step 7: Install Base Dependencies
+```powershell
+pip install -e .
+```
+
+### Step 8: Install Development Dependencies
+```powershell
+pip install -e ".[dev]"
+```
+
+### Step 9: Configure Atomics Path
+```powershell
+purpletool config set-atomics-path "C:\AtomicRedTeam\atomics"
+```
+
+## Verification
+To verify the installation was successful, run:
+```powershell
+purpletool --version
+```
+
+## Troubleshooting
+
+If you encounter any issues during installation:
+
+1. Ensure you're running PowerShell as Administrator
+2. Check that your Python version meets the requirements
+3. Verify that Git is installed and accessible from your PATH
+4. Make sure Windows Defender exclusions are properly configured
+
+## Uninstallation
+
+When you're done with the tools:
+
+1. Remove the Windows Security exclusions
+2. Delete the `C:\AtomicRedTeam` folder
+3. Deactivate the virtual environment with `deactivate`
+4. Remove the cloned repository
+
+_____________________________________________________________________________________________________
+
 ### 1. Install Python 3.8+
 
 - Windows: [Python.org](https://www.python.org/downloads/)
