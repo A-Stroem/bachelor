@@ -1,0 +1,36 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Environment variables and configuration
+.env
+*.config.js
+config.json
+
+# Coverage output
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# Logs
+logs/
+*.log
+
+# Docker
+docker-compose.override.yml
+
+# Local development files
+local.*
+secret.*
+*.local.*
+*.secret.*
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
