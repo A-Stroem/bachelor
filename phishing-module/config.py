@@ -12,7 +12,7 @@ EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD') # Consider using app passwords for 
 
 # File Paths
 RECIPIENTS_FILE = os.path.join('data', 'recipients.csv')
-TEMPLATE_FILE = os.path.join('templates', 'email_template.html')
+TEMPLATE_FILE = os.path.join('templates', 'microsoft_password_update.html')
 
 # Basic validation (optional but recommended)
 if not all([SMTP_SERVER, EMAIL_ADDRESS, EMAIL_PASSWORD]):

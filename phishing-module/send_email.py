@@ -12,49 +12,58 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def read_recipients(filename):
-    """Reads recipients from a CSV file, assuming UTF-16 encoding."""
+    """Reads recipients from a CSV file, trying both UTF-16 and UTF-8 encodings."""
     recipients = []
-    file_encoding = 'utf-16'
-
-    try:
-        with open(filename, mode='r', encoding=file_encoding, newline='') as file:
-            reader = csv.DictReader(file)
-            # Check header after successful read
-            if not reader.fieldnames:
-                logging.error(f"CSV file '{filename}' appears to be empty or header is missing (using encoding {file_encoding}).")
-                return []
-            if not all(col in reader.fieldnames for col in ['email', 'name']):
-                logging.error(f"CSV file '{filename}' must contain 'email' and 'name' columns. Found columns: {reader.fieldnames} (using encoding {file_encoding})")
-                return []
-            # Read all rows if header is correct
-            recipients = list(reader)
-            logging.info(f"Successfully read {len(recipients)} recipients from {filename} using {file_encoding} encoding.")
-
-    except FileNotFoundError:
-        logging.error(f"Recipients file not found: {filename}")
-        return []
-    except Exception as e:
-        logging.error(f"Error reading recipients file {filename} (using encoding {file_encoding}): {e}")
-        return [] # Return empty list on other errors
-
+    encodings = ['utf-16', 'utf-8']
+    
+    for file_encoding in encodings:
+        try:
+            with open(filename, mode='r', encoding=file_encoding, newline='') as file:
+                reader = csv.DictReader(file)
+                # Check header after successful read
+                if not reader.fieldnames:
+                    logging.error(f"CSV file '{filename}' appears to be empty or header is missing (using encoding {file_encoding}).")
+                    continue
+                if not all(col in reader.fieldnames for col in ['email', 'name']):
+                    logging.error(f"CSV file '{filename}' must contain 'email' and 'name' columns. Found columns: {reader.fieldnames} (using encoding {file_encoding})")
+                    continue
+                # Read all rows if header is correct
+                recipients = list(reader)
+                logging.info(f"Successfully read {len(recipients)} recipients from {filename} using {file_encoding} encoding.")
+                return recipients
+        except UnicodeDecodeError:
+            logging.warning(f"Failed to decode {filename} with {file_encoding} encoding. Trying next encoding...")
+        except FileNotFoundError:
+            logging.error(f"Recipients file not found: {filename}")
+            return []
+        except Exception as e:
+            logging.error(f"Error reading recipients file {filename} (using encoding {file_encoding}): {e}")
+    
+    if not recipients:
+        logging.error(f"Could not read recipients file with any supported encodings: {encodings}")
     return recipients
 
 def read_template(filename):
-    """Reads the email template from a file, assuming UTF-16 encoding."""
+    """Reads the email template from a file, trying both UTF-16 and UTF-8 encodings."""
     template = None
-    file_encoding = 'utf-16' 
-
-    try:
-        with open(filename, mode='r', encoding=file_encoding) as file:
-            template = file.read()
-        logging.info(f"Successfully read template file: {filename} using {file_encoding} encoding.")
-    except FileNotFoundError:
-        logging.error(f"Template file not found: {filename}")
-        return None
-    except Exception as e:
-        logging.error(f"Error reading template file {filename} (using encoding {file_encoding}): {e}")
-        return None # Return None on other errors
-
+    encodings = ['utf-16', 'utf-8']
+    
+    for file_encoding in encodings:
+        try:
+            with open(filename, mode='r', encoding=file_encoding) as file:
+                template = file.read()
+            logging.info(f"Successfully read template file: {filename} using {file_encoding} encoding.")
+            return template
+        except UnicodeDecodeError:
+            logging.warning(f"Failed to decode {filename} with {file_encoding} encoding. Trying next encoding...")
+        except FileNotFoundError:
+            logging.error(f"Template file not found: {filename}")
+            return None
+        except Exception as e:
+            logging.error(f"Error reading template file {filename} (using encoding {file_encoding}): {e}")
+    
+    if template is None:
+        logging.error(f"Could not read template file with any supported encodings: {encodings}")
     return template
 
 def send_emails(recipients, template_html):
@@ -76,11 +85,18 @@ def send_emails(recipients, template_html):
             for recipient in recipients:
                 try:
                     msg = EmailMessage()
-                    # Assumes template uses {name}, {email} placeholders
-                    personalized_body = template_html.format(
-                        name=recipient.get('name', 'Valued Customer'), # Provide default if name is missing
+                    
+                    # Safely format the template by escaping existing braces first
+                    # This changes { to {{ and } to }} for non-placeholder braces
+                    safe_template = template_html.replace('{', '{{').replace('}', '}}')
+                    
+                    # Now restore our intended placeholders by changing back {{name}} to {name}
+                    safe_template = safe_template.replace('{{name}}', '{name}').replace('{{email}}', '{email}')
+                    
+                    # Now format with recipient data
+                    personalized_body = safe_template.format(
+                        name=recipient.get('name', 'Valued Customer'),
                         email=recipient['email']
-                        # Add more fields from your CSV as needed: field=recipient.get('field_name', 'default')
                     )
 
                     msg.set_content("Please enable HTML to view this email.") # Fallback for non-HTML clients
