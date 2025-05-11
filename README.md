@@ -1,47 +1,75 @@
-# Azure Deployment Configuration Repository
+# Bachelor Project: Purple Team Tools
 
-This repository serves as version control for Azure deployment setups. It contains Bicep modules, ARM templates, Azure Pipelines definitions, and associated configuration files used to provision and manage Azure resources.
+This repository contains a collection of cybersecurity tools and projects developed as part of a bachelor's thesis focused on purple team operations. Each project serves a specific purpose within the purple teaming framework, enabling the simulation of both offensive (red team) and defensive (blue team) security activities.
 
-## Purpose
+## Repository Structure
 
-The primary goal of this repository is to maintain a consistent, version-controlled, and modular collection of infrastructure-as-code (IaC) for various Azure environments, focusing on core networking, DevTest Labs, and shared services.
+This repository is organized into several distinct projects:
 
-## Structure
+### 1. Purple Team CLI
 
-- **`/azure/arm`**: Contains original or decompiled ARM templates. These might serve as a reference or for specific use cases not yet migrated to Bicep.
-- **`/azure/infra`**: Contains the core Bicep modules organized by function:
-  - `core/`: Modules for fundamental networking infrastructure (VNet, Subnets, Bastion).
-  - `devtestlabs/`: Modules for deploying and configuring Azure DevTest Labs.
-  - `shared/`: Modules for shared resources like Key Vaults or Storage Accounts.
-- **`/azure/lab-content`**: Stores content specific to DevTest Labs, such as:
-  - `formulas/`: Definitions for reusable VM bases (e.g., `windos-server-2022-base.json`).
-- **`/azure/parameters`**: Holds top-level parameter files (e.g., `dev.parameters.json`) for different environments or deployment scenarios.
-- **`/azure/pipelines`**: Contains Azure Pipelines YAML definitions for CI/CD automation (e.g., `azure-pipelines.yml`, `deploy-infra.yml`).
-- **`/azure/scripts`**: Includes supplementary scripts used during deployment, configuration, or maintenance.
+A command-line interface tool for executing Atomic Red Team tests to facilitate adversary emulation and purple team exercises. This tool provides a Python-based orchestrator for running security tests in a controlled lab environment.
 
-## Bicep Modules
+**Key features:**
 
-### Core Infrastructure (`/azure/infra/core`)
+- Execute Atomic Red Team tests by technique ID
+- Run playbooks that group related techniques
+- Check and install prerequisites for tests
+- Supports remote execution
 
-- **`network.bicep`**: Defines the core Virtual Network (VNet) and its subnets, including the dedicated `AzureBastionSubnet` and a subnet for DevTest Labs.
-- **`bastion.bicep`**: Deploys the Azure Bastion host, including its required Public IP address, and configures it to use the `AzureBastionSubnet` from the core network.
-- **`main.bicep`**: Orchestrates the deployment of the core networking and bastion modules, taking environment-specific parameters.
+**Location:** `/purple-team-cli/`
 
-### DevTest Labs (`/azure/infra/devtestlabs`)
+### 2. Phishing Simulation Site
 
-- **`lab.bicep`**: Deploys an Azure DevTest Lab instance, configures its connection to the core VNet, sets up artifact repositories (public and potentially custom), and defines auto-shutdown schedules.
-- **`policies.bicep`**: (Placeholder/Not fully implemented) Intended for defining DevTest Lab policies (e.g., allowed VM sizes, VM count limits).
-- **`main.bicep`**: Orchestrates the deployment of the DevTest Lab, passing necessary parameters like the core VNet ID.
+A web application that simulates common phishing techniques for educational and security awareness purposes. The site includes multiple phishing templates and captures interaction details.
 
-### Shared Resources (`/azure/infra/shared`)
+**Key features:**
 
-- **`keyvault.bicep`**: (Placeholder) Module for deploying Azure Key Vault.
-- **`storageaccount.bicep`**: (Placeholder) Module for deploying Azure Storage Accounts.
+- Multiple phishing templates (Microsoft, KEA)
+- Credential harvesting simulation
+- Detailed logging of user interactions
+- Discord webhook integration for notifications
 
-## Deployment
+**Location:** `/phishing_site/`
 
-Deployments are intended to be automated using Azure Pipelines defined in the `/azure/pipelines` directory. Parameter files in `/azure/parameters` and module-specific parameter files (like `/azure/infra/core/dev.parameters.json`) are used to customize deployments for different environments (e.g., 'dev').
+### 3. Phishing Email Module
+
+A Python module for sending simulated phishing emails as part of security awareness training. Supports both standard and spoofed emails.
+
+**Key features:**
+
+- Email template support
+- Recipient list management via CSV
+- Support for email spoofing (for authorized testing)
+- Customizable templates
+
+**Location:** `/phishing-module/`
+
+### 4. Azure Infrastructure as Code
+
+Version-controlled Azure deployment configurations using Bicep and ARM templates. This includes network infrastructure, DevTest Labs, and shared services setups.
+
+**Key features:**
+
+- Core network infrastructure definitions
+- DevTest Labs configurations
+- Azure Bastion setup
+- Pipeline definitions for automated deployment
+
+**Location:** `/azure/`
+
+## Usage Notes
+
+These tools are designed for educational purposes, security research, and authorized security testing only. Proper authorization should be obtained before using any of these tools in a production environment or against systems you do not own.
 
 ## Getting Started
 
-_(Add instructions here on how to configure and run the pipelines or manual deployment steps if applicable)_
+Each project folder contains its own README with specific installation and usage instructions. Please refer to those for detailed guidance on working with individual components.
+
+## License
+
+This project is licensed under the MIT License - see the individual project directories for specific licensing information.
+
+## Disclaimer
+
+The tools in this repository are intended for authorized security testing, educational purposes, and security research only. Misuse of these tools against unauthorized targets may be illegal. The author takes no responsibility for any misuse of the provided materials.
