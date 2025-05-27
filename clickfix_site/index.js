@@ -7,7 +7,6 @@ const PORT = process.env.PORT || 3001;
 // Serve static files from a 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Basic route
 app.get('/clickfix', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'clickfix.html'));
 });
