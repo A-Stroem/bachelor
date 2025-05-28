@@ -4,11 +4,17 @@ from typing import Dict, List, Optional, Callable, Tuple, Any, Set # Added Any, 
 import yaml
 from pathlib import Path
 import re 
+import subprocess
+import shutil
+import importlib.util
+import time
+import json # Added for parsing credentials
 
 from rich.console import Console
 from rich.prompt import Prompt, IntPrompt, Confirm 
 from rich.panel import Panel
 from rich.table import Table
+from rich import markup # Added for escaping markup
 # Removed unused rprint import
 
 # Removed unused list_available_tests import
@@ -39,6 +45,13 @@ TACTICS = {
 # {platform: {tactic: {technique_id: {name, platforms, phases, has_tests}}}}
 INDEX_DATA_CACHE: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
 AVAILABLE_PLATFORMS: List[str] = []
+
+# Prerequisites for Phishing Simulation
+REQUIRED_PYTHON_PACKAGES_PHISHING: List[str] = ["requests", "python-dotenv"] # Example: adjust as needed
+
+# Global variable to store the phishing server process
+PHISHING_SERVER_PROCESS: Optional[subprocess.Popen] = None
+
 
 def get_index_dir() -> Optional[Path]:
     """Gets the path to the Indexes directory within the configured atomics path."""
@@ -650,6 +663,7 @@ def run_test_menu() -> None:
     console.print("[bold]Select a technique to run:[/bold]")
     console.print("1. Enter technique ID directly")
     console.print("2. Browse available techniques")
+    console.print("3. Custom tests")
     
     choice = IntPrompt.ask("Enter your choice", default=1)
     
@@ -826,6 +840,10 @@ def run_test_menu() -> None:
             console.print("[bold red]Invalid choice.[/bold red]")
             pause()
             return
+    elif choice == 3:
+        # Custom tests menu
+        custom_test_menu()
+        return
     else:
         console.print("[bold red]Invalid choice.[/bold red]")
         pause()
@@ -1126,24 +1144,41 @@ def configuration_menu() -> None:
         config = get_config()
         
         # Display current configuration
+        atomics_display = markup.escape(config.atomics_path) if config.atomics_path else "[italic yellow]Not set[/italic]"
+        powershell_display = markup.escape(config.powershell_path) if config.powershell_path else "[italic yellow]Not set (using default)[/italic]"
+        # Timeout is an int, no need to escape
+        phishing_site_display = markup.escape(config.phishing_site_path) if config.phishing_site_path else "[italic yellow]Not set[/italic]"
+        phishing_module_display = markup.escape(config.phishing_module_path) if config.phishing_module_path else "[italic yellow]Not set[/italic]"
+
         console.print("[bold]Current Configuration:[/bold]")
-        console.print(f"1. Atomics Path:    {config.atomics_path or '[italic yellow]Not set[/italic]'}")
-        console.print(f"2. PowerShell Path: {config.powershell_path or '[italic yellow]Not set (using default)[/italic]'}")
+        console.print(f"1. Atomics Path:    {atomics_display}")
+        console.print(f"2. PowerShell Path: {powershell_display}")
         console.print(f"3. Command Timeout: {config.timeout} seconds")
+        console.print(f"4. Phishing Site Path:  {phishing_site_display}")
+        console.print(f"5. Phishing Module Path: {phishing_module_display}")
+
+        # Determine the base for option numbering
+        # Number of displayed config items + 1 for the first actual option
+        # Current config items: Atomics Path, PowerShell Path, Timeout, Phishing Site Path, Phishing Module Path (5 items)
+        # So, options start at 5 + 1 = 6
+        options_start_num = 6
+
         
         # Configuration options
         options = [
             "Set Atomics Path",
             "Set PowerShell Path",
             "Set Command Timeout",
+            "Set Phishing Site Path",
+            "Set Phishing Module Path", # New
             "Return to Main Menu"
         ]
         
         console.print("\n[bold]Options:[/bold]")
         for i, option in enumerate(options, 1):
-            console.print(f"[bold cyan]{i+3}.[/bold cyan] {option}") # Start numbering after current settings
+            console.print(f"[bold cyan]{options_start_num + i -1}.[/bold cyan] {option}")
         
-        choice = IntPrompt.ask("\nEnter number to modify or return", default=len(options)+3) # Default to return
+        choice = IntPrompt.ask("\nEnter number to modify or return", default=options_start_num + len(options) - 1) # Default to return
         
         if choice == 1: # Corresponds to Atomics Path display line
             # Corrected indentation
@@ -1204,7 +1239,7 @@ def configuration_menu() -> None:
                 console.print("[yellow]Timeout must be a positive number. Not changed.[/yellow]")
             pause()
         
-        elif choice == 4: # Set Atomics Path option
+        elif choice == options_start_num: # 6. Set Atomics Path option
             # Corrected indentation
             path = Prompt.ask(
                  "Enter the path to the atomic-red-team/atomics directory",
@@ -1232,7 +1267,7 @@ def configuration_menu() -> None:
             # Corrected indentation
             pause()
 
-        elif choice == 5: # Set PowerShell Path option
+        elif choice == options_start_num + 1: # 7. Set PowerShell Path option
             path = Prompt.ask(
                 "Enter the path to the PowerShell executable (e.g., 'powershell' or '/usr/bin/pwsh')",
                 default=config.powershell_path or "powershell"
@@ -1245,7 +1280,7 @@ def configuration_menu() -> None:
                 console.print("[yellow]PowerShell path not changed.[/yellow]")
             pause()
 
-        elif choice == 6: # Set Command Timeout option
+        elif choice == options_start_num + 2: # 8. Set Command Timeout option
             timeout = IntPrompt.ask(
                 "Enter the command timeout in seconds (e.g., 300)",
                 default=config.timeout,
@@ -1259,7 +1294,34 @@ def configuration_menu() -> None:
                 console.print("[yellow]Timeout must be a positive number. Not changed.[/yellow]")
             pause()
 
-        elif choice == 7: # Return to Main Menu option
+        elif choice == options_start_num + 3: # 9. Set Phishing Site Path option
+            path_str = Prompt.ask(
+                "Enter the path to your 'phishing_site' directory",
+                default=config.phishing_site_path or ""
+            ).strip()
+            if path_str:
+                phishing_path = Path(path_str)
+                if phishing_path.is_dir() and (phishing_path / "api" / "index.js").exists():
+                    set_config("phishing_site_path", str(phishing_path.resolve()))
+                    console.print(f"[bold green]Phishing site path set to:[/bold green] {phishing_path.resolve()}")
+                else:
+                    console.print(f"[bold red]Error:[/bold red] Path '{phishing_path}' does not seem to be a valid phishing_site directory (missing api/index.js).")
+            pause()
+        elif choice == options_start_num + 4: # 10. Set Phishing Module Path option
+            path_str = Prompt.ask(
+                "Enter the path to your 'phishing-module' directory (containing send_email.py)",
+                default=config.phishing_module_path or ""
+            ).strip()
+            if path_str:
+                module_path = Path(path_str)
+                if module_path.is_dir() and (module_path / "send_email.py").exists():
+                    set_config("phishing_module_path", str(module_path.resolve()))
+                    console.print(f"[bold green]Phishing module path set to:[/bold green] {module_path.resolve()}")
+                else:
+                    console.print(f"[bold red]Error:[/bold red] Path '{module_path}' does not seem to be a valid phishing-module directory (missing send_email.py).")
+            pause()
+
+        elif choice == options_start_num + 5: # 11. Return to Main Menu option
             break
         else:
             console.print("[red]Invalid choice.[/red]")
@@ -1367,6 +1429,465 @@ For more information, please refer to the documentation or visit the Atomic Red 
 """)
     pause()
 
+
+def custom_test_menu() -> None:
+    """Display menu of available custom tests."""
+    print_header("Custom Tests")
+    
+    # Show available custom test options
+    console.print("[bold]Available Custom Tests:[/bold]")
+    console.print("1. Phishing Simulation")
+    console.print("2. Back to Run Test Menu")
+    
+    choice = IntPrompt.ask("Enter your choice", default=1)
+    
+    if choice == 1:
+        # Run phishing simulation
+        phishing_simulation_menu()
+    elif choice == 2:
+        # Go back
+        return
+    else:
+        console.print("[bold red]Invalid choice.[/bold red]")
+        pause()
+        custom_test_menu()  # Show the menu again
+
+
+
+def check_phishing_prerequisites(verbose: bool = True) -> bool:
+    """Checks if all prerequisites for the phishing simulation are present."""
+    all_present = True
+    missing_prereqs: List[str] = []
+
+    if verbose:
+        console.print("\n[bold]Checking Phishing Simulation Prerequisites:[/bold]")
+
+    # 1. Check for Node.js
+    try:
+        result = subprocess.run(["node", "--version"], capture_output=True, text=True, check=True, shell=False, timeout=10)
+        if verbose:
+            console.print(f"[green]✓ Node.js found:[/green] {result.stdout.strip()}")
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        if verbose:
+            console.print("[bold red]✗ Node.js not found or 'node --version' failed.[/bold red] Node.js is required for the phishing website.")
+        all_present = False
+        missing_prereqs.append("Node.js")
+
+    # 2. Check for required Python packages using pip list
+    if verbose and REQUIRED_PYTHON_PACKAGES_PHISHING:
+        console.print("[bold]Checking Python packages:[/bold]")
+    
+    try:
+        # Get the list of installed packages using pip
+        pip_result = subprocess.run(
+            [sys.executable, "-m", "pip", "list", "--format=json"],
+            capture_output=True, text=True, check=True, shell=False, timeout=30
+        )
+        
+        # Parse the JSON output
+        installed_packages = {}
+        try:
+            packages_data = json.loads(pip_result.stdout)
+            for package in packages_data:
+                installed_packages[package['name'].lower()] = package['version']
+        except json.JSONDecodeError:
+            if verbose:
+                console.print("[yellow]Warning: Could not parse pip list output. Falling back to importlib.[/yellow]")
+            # Fall back to importlib if pip list JSON parsing fails
+            for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+                spec = importlib.util.find_spec(package_name)
+                if spec is None:
+                    if verbose:
+                        console.print(f"[bold red]✗ Python package '{package_name}' not found.[/bold red]")
+                    all_present = False
+                    missing_prereqs.append(f"Python package: {package_name}")
+                elif verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found.[/green]")
+            
+            # Skip the rest of the function since we already checked with importlib
+            if verbose:
+                if not all_present:
+                    console.print("\n[bold yellow]Some prerequisites are missing.[/bold yellow]")
+                else:
+                    console.print("\n[bold green]All phishing prerequisites appear to be present.[/bold green]")
+            return all_present
+        
+        # Check if required packages are installed
+        for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+            package_lower = package_name.lower().replace('-', '_')  # Convert to lowercase and handle potential dashes
+            alternative_name = package_name.lower().replace('_', '-')  # Try the opposite naming convention
+            
+            if package_lower in installed_packages:
+                if verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found (version: {installed_packages[package_lower]}).[/green]")
+            elif alternative_name in installed_packages:
+                if verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found as '{alternative_name}' (version: {installed_packages[alternative_name]}).[/green]")
+            else:
+                # Try a secondary check with importlib for packages that might be installed but named differently
+                spec = importlib.util.find_spec(package_name)
+                if spec is None:
+                    if verbose:
+                        console.print(f"[bold red]✗ Python package '{package_name}' not found.[/bold red]")
+                    all_present = False
+                    missing_prereqs.append(f"Python package: {package_name}")
+                elif verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found via importlib.[/green]")
+    
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+        if verbose:
+            console.print(f"[yellow]Warning: Could not run pip list command: {str(e)}. Falling back to importlib.[/yellow]")
+        
+        # Fall back to importlib if pip list fails
+        for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+            spec = importlib.util.find_spec(package_name)
+            if spec is None:
+                if verbose:
+                    console.print(f"[bold red]✗ Python package '{package_name}' not found.[/bold red]")
+                all_present = False
+                missing_prereqs.append(f"Python package: {package_name}")
+            elif verbose:
+                console.print(f"[green]✓ Python package '{package_name}' found via importlib.[/green]")
+    
+    if verbose:
+        if not all_present:
+            console.print("\n[bold yellow]Some prerequisites are missing.[/bold yellow]")
+        else:
+            console.print("\n[bold green]All phishing prerequisites appear to be present.[/bold green]")
+        
+    return all_present
+
+
+def install_phishing_prerequisites() -> None:
+    """Guides the user or attempts to install missing prerequisites for phishing simulation."""
+    console.print("\n[bold]Addressing Missing Phishing Simulation Prerequisites...[/bold]")
+    
+    # 1. Guide for Node.js
+    try:
+        subprocess.run(["node", "--version"], capture_output=True, text=True, check=True, shell=False, timeout=10)
+        console.print("[green]✓ Node.js seems to be installed.[/green]")
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        console.print("[bold yellow]Node.js is not installed or not found in PATH.[/bold yellow]")
+        console.print("  Please install Node.js manually from [link=https://nodejs.org/]https://nodejs.org/[/link]")
+        console.print("  After installation, ensure 'node' is available in your system's PATH and restart this CLI.")
+
+    # 2. Attempt to install Python packages
+    installed_any_python_package = False
+    if REQUIRED_PYTHON_PACKAGES_PHISHING:
+        console.print("\n[bold]Checking and installing Python packages via pip:[/bold]")
+
+    for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+        if importlib.util.find_spec(package_name) is None:
+            console.print(f"\n[yellow]Python package '{package_name}' is missing.[/yellow]")
+            if Confirm.ask(f"Attempt to install '{package_name}' using pip?", default=True):
+                console.print(f"[italic]Installing {package_name}...[/italic]")
+                try:
+                    console.print(f"[dim]Using Python interpreter for pip: {sys.executable}[/dim]") # Debug line added
+                    pip_command = [sys.executable, "-m", "pip", "install", package_name]
+                    result = subprocess.run(pip_command, capture_output=True, text=True, check=True, timeout=120)
+                    console.print(f"[green]✓ Successfully installed {package_name}.[/green]")
+                    if result.stdout.strip():
+                        console.print(f"[dim]Pip output:\n{result.stdout}[/dim]")
+                    installed_any_python_package = True
+                    importlib.invalidate_caches() # Invalidate import caches
+                except subprocess.CalledProcessError as e:
+                    console.print(f"[bold red]✗ Failed to install {package_name}.[/bold red]")
+                    error_output = e.stderr or e.stdout
+                    console.print(f"  Error: {error_output.strip() if error_output else 'No error output from pip.'}")
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    console.print("[bold red]✗ pip command failed or timed out. Ensure Python and pip are correctly installed and in PATH.[/bold red]")
+                    break 
+            else:
+                console.print(f"[yellow]Skipped installation of {package_name}.[/yellow]")
+        else:
+            console.print(f"[green]✓ Python package '{package_name}' is already installed.[/green]")
+
+    console.print("\n[bold]Prerequisite addressing process finished.[/bold]")
+    pause()
+
+def phishing_simulation_menu() -> None:
+    """Display the phishing simulation menu and execute the selected operation."""
+    print_header("Phishing Simulation")
+    
+    # Options for phishing simulation
+    options = [
+        "Execute Phishing Simulation",
+        "Check Prerequisites Only",
+        "Install Prerequisites",
+        "Cleanup After Simulation",
+        "Back to Custom Tests Menu"
+    ]
+    
+    for i, option in enumerate(options, 1):
+        console.print(f"[bold cyan]{i}.[/bold cyan] {option}")
+    
+    choice = IntPrompt.ask("\nEnter your choice", default=1)
+    
+    if choice == 1:
+        # Execute the simulation
+        run_phishing_simulation() # Actually run it
+        phishing_simulation_menu() # Then return to menu
+    elif choice == 2:
+        # Check prerequisites
+        check_phishing_prerequisites(verbose=True)
+        pause()
+        phishing_simulation_menu()
+    elif choice == 3:
+        # Install prerequisites
+        install_phishing_prerequisites()
+        # install_phishing_prerequisites already has a pause
+        phishing_simulation_menu()
+    elif choice == 4:
+        # Cleanup
+        cleanup_phishing_simulation()
+        phishing_simulation_menu()
+    elif choice == 5:
+        # Go back
+        custom_test_menu()
+        return
+    else:
+        console.print("[bold red]Invalid choice.[/bold red]")
+        pause()
+        phishing_simulation_menu()  # Show the menu again
+
+
+def run_phishing_simulation() -> None:
+    """Executes the phishing simulation."""
+    global PHISHING_SERVER_PROCESS
+    print_header("Executing Phishing Simulation")
+
+    config = get_config()
+    phishing_site_dir_str = config.phishing_site_path
+    phishing_module_dir_str = config.phishing_module_path # New
+    
+    console.print("[italic]Checking prerequisites before starting simulation...[/italic]")
+    if not check_phishing_prerequisites(verbose=False): # Keep this check less verbose initially
+        console.print("[bold red]✗ Prerequisites for phishing simulation are not met.[/bold red]")
+        if Confirm.ask("Do you want to view details and attempt to install/address them now?", default=True):
+            # Show detailed check
+            check_phishing_prerequisites(verbose=True) 
+            install_phishing_prerequisites() # This function includes its own prompts and pause
+            
+            console.print("[italic]Re-checking prerequisites after installation attempt...[/italic]")
+            if not check_phishing_prerequisites(verbose=True):
+                console.print("[bold red]Prerequisites are still not met. Aborting simulation.[/bold red]")
+                pause()
+                return
+            console.print("[bold green]Prerequisites now seem to be met. Proceeding with simulation...[/bold green]")
+            # A short pause to acknowledge before continuing
+            time.sleep(1)
+        else:
+            console.print("[yellow]Phishing simulation aborted due to missing prerequisites.[/yellow]")
+            pause()
+            return
+
+    if not phishing_site_dir_str:
+        console.print("[bold red]Phishing site path is not configured.[/bold red]")
+        console.print("Please set it in the Configuration menu.")
+        pause()
+        return
+    
+    if not phishing_module_dir_str: # New check
+        console.print("[bold red]Phishing module path is not configured.[/bold red]")
+        console.print("Please set it in the Configuration menu (path to directory containing send_email.py).")
+        pause()
+        return
+
+    phishing_site_dir = Path(phishing_site_dir_str)
+    api_dir = phishing_site_dir / "api"
+    log_dir = phishing_site_dir / "logs"
+    credential_log_file = log_dir / "detailed_credentials.json"
+
+    if not (api_dir.is_dir() and (api_dir / "index.js").exists()):
+        console.print(f"[bold red]Invalid phishing_site_path: '{phishing_site_dir}'. 'api/index.js' not found.[/bold red]")
+        pause()
+        return
+
+    phishing_module_dir = Path(phishing_module_dir_str) # New
+    email_script_path = phishing_module_dir / "send_email.py" # New
+    if not email_script_path.exists():
+        console.print(f"[bold red]Email sending script not found at '{email_script_path}'. Check Phishing Module Path configuration.[/bold red]")
+        pause()
+        return
+
+    # Ensure logs directory exists
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Start the Node.js phishing server
+    if PHISHING_SERVER_PROCESS and PHISHING_SERVER_PROCESS.poll() is None:
+        console.print("[yellow]Phishing server already seems to be running.[/yellow]")
+    else:
+        console.print(f"[italic]Starting phishing website server from {api_dir}...[/italic]")
+        try:
+            # For Windows, shell=True might be needed if 'node' is a .cmd or .bat file,
+            # but it's generally safer to ensure 'node' is directly executable.
+            # shell=False is preferred.
+            PHISHING_SERVER_PROCESS = subprocess.Popen(
+                ["node", "index.js"],
+                cwd=api_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=sys.platform == "win32" # Use shell=True on Windows if node is a script/batch file
+            )
+            console.print("[green]✓ Phishing server started in background (PID: {PHISHING_SERVER_PROCESS.pid}).[/green]")
+            console.print("  URL: [link=http://localhost:3000/microsoft_login.html]http://localhost:3000/microsoft_login.html[/link]")
+            console.print("  KEA URL: [link=http://localhost:3000/kea_microsoft_login.html]http://localhost:3000/kea_microsoft_login.html[/link]")
+            time.sleep(3) # Give server a moment to start
+            if PHISHING_SERVER_PROCESS.poll() is not None: # Check if it exited immediately
+                stderr_output = PHISHING_SERVER_PROCESS.stderr.read() if PHISHING_SERVER_PROCESS.stderr else "No stderr."
+                raise Exception(f"Server failed to start. Exit code: {PHISHING_SERVER_PROCESS.returncode}. Stderr: {stderr_output}")
+        except Exception as e:
+            console.print(f"[bold red]✗ Failed to start phishing server: {e}[/bold red]")
+            PHISHING_SERVER_PROCESS = None
+            pause()
+            return
+
+    # 2. Run the email sending script (placeholder)
+    console.print("\n[italic]Executing email sending script...[/italic]")
+    try:
+        # The user's send_email.py handles its own config for recipients and template.
+        # The phishing_url is displayed when the server starts; user must ensure their template uses it.
+        # target_email = Prompt.ask("Enter target email address for the phishing test", default="victim@example.com") # Not used by user's script
+        # phishing_url = "http://localhost:3000/microsoft_login.html" # Displayed when server starts
+        
+        console.print(f"  [dim]Your email script '{email_script_path.name}' will use its own configuration (recipients, template).[/dim]")
+        console.print(f"  [dim]Ensure your email template points to the phishing URLs displayed above.[/dim]")
+        email_script_command = [sys.executable, str(email_script_path)]
+        email_result = subprocess.run(email_script_command, capture_output=True, text=True, check=True, timeout=120, cwd=phishing_module_dir) # Added cwd
+        console.print(f"[green]✓ Email sending script executed.[/green]\n[dim]{email_result.stdout}[/dim]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[bold red]✗ Email sending script failed: {e.stderr or e.stdout}[/bold red]")
+    except Exception as e:
+        console.print(f"[bold red]✗ Error running email sending script: {e}[/bold red]")
+
+    # 3. Monitor for credentials
+    last_known_creds_count = 0
+    if credential_log_file.exists(): # Get initial count if file exists
+        with open(credential_log_file, "r", encoding='utf-8') as f_init:
+            content_init = f_init.read().strip()
+            if content_init:
+                try:
+                    # With our backend changes, this should now be a valid JSON array
+                    current_creds_objects_init = json.loads(content_init)
+                    if isinstance(current_creds_objects_init, list):
+                        last_known_creds_count = len(current_creds_objects_init)
+                    else:
+                        # Fallback for possibly not-yet-converted files
+                        json_records = '[' + content_init.rstrip(',') + ']'
+                        current_creds_objects_init = json.loads(json_records)
+                        last_known_creds_count = len(current_creds_objects_init)
+                    
+                    console.print(f"[dim]Found {last_known_creds_count} existing credential entries[/dim]")
+                except json.JSONDecodeError as e:
+                    # Fallback to basic counting if JSON parsing fails
+                    # Fix the Rich markup by ensuring all tags are balanced
+                    console.print(f"[yellow dim]Warning: Couldn't parse credentials file as JSON: {str(e)}[/yellow dim]")
+                    potential_creds_str_init = [s for s in content_init.split('},') if s.strip()]
+                    last_known_creds_count = len(potential_creds_str_init)
+                    console.print(f"[dim]Found approximately {last_known_creds_count} existing credential entries[/dim]")
+
+    console.print(f"\n[cyan]Monitoring for credentials in '{credential_log_file}'... Press Ctrl+C to stop.[/cyan]")
+    try:
+        while True:
+            if credential_log_file.exists():
+                with open(credential_log_file, "r", encoding='utf-8') as f:
+                    content = f.read().strip()
+                
+                if not content:
+                    time.sleep(5)
+                    continue
+
+                try:
+                    # Parse the content as a proper JSON array
+                    current_creds_objects = json.loads(content)
+                    
+                    # Make sure it's a list
+                    if not isinstance(current_creds_objects, list):
+                        # Try the old format conversion as fallback
+                        json_records = '[' + content.rstrip(',') + ']'
+                        current_creds_objects = json.loads(json_records)
+                    
+                    if len(current_creds_objects) > last_known_creds_count:
+                        new_creds_count = len(current_creds_objects) - last_known_creds_count
+                        console.print(f"\n[bold green]🎉 {new_creds_count} new credential(s) captured![/bold green]")
+                        
+                        for cred_obj in current_creds_objects[last_known_creds_count:]:
+                            email = cred_obj.get("credentials", {}).get("email", "N/A")
+                            # For safety, avoid printing password directly in a real tool or log it carefully
+                            # password = cred_obj.get("credentials", {}).get("password", "N/A") 
+                            ip = cred_obj.get("userInfo", {}).get("ipAddress", "N/A")
+                            ua = cred_obj.get("userInfo", {}).get("userAgent", "N/A")
+                            timestamp = cred_obj.get("timestamp", "Unknown time")
+                            console.print(f"  - [{timestamp}] Email: {email}, IP: {ip}, UserAgent: {ua}")
+                        
+                        last_known_creds_count = len(current_creds_objects)
+                except json.JSONDecodeError as e:
+                    # If JSON parsing fails, try the old method
+                    # Fix Rich markup formatting
+                    console.print(f"[yellow dim]Warning: JSON parsing error: {str(e)}[/yellow dim]")
+                    potential_creds_str = [s for s in content.split('},') if s.strip()]
+                    
+                    if len(potential_creds_str) > last_known_creds_count:
+                        new_creds_count = len(potential_creds_str) - last_known_creds_count
+                        console.print(f"\n[bold green]🎉 {new_creds_count} new credential(s) captured! (fallback detection)[/bold green]")
+                        last_known_creds_count = len(potential_creds_str)
+            
+            time.sleep(config.timeout / 60 if config.timeout > 60 else 5) # Check every 5 seconds, or more if timeout is long
+    
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped monitoring credentials.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[bold red]Error during credential monitoring: {e}[/bold red]")
+
+    console.print("\n[bold green]Phishing simulation completed.[/bold green]")
+    pause()
+
+
+def cleanup_phishing_simulation() -> None:
+    """Cleans up after a phishing simulation."""
+    global PHISHING_SERVER_PROCESS
+    print_header("Cleanup Phishing Simulation")
+
+    # 1. Stop the Node.js server
+    if PHISHING_SERVER_PROCESS and PHISHING_SERVER_PROCESS.poll() is None:
+        console.print(f"[italic]Stopping phishing server (PID: {PHISHING_SERVER_PROCESS.pid})...[/italic]")
+        try:
+            PHISHING_SERVER_PROCESS.terminate() # Send SIGTERM
+            PHISHING_SERVER_PROCESS.wait(timeout=10) # Wait for graceful shutdown
+            console.print("[green]✓ Phishing server terminated.[/green]")
+        except subprocess.TimeoutExpired:
+            console.print("[yellow]Phishing server did not terminate gracefully, killing...[/yellow]")
+            PHISHING_SERVER_PROCESS.kill() # Force kill
+            PHISHING_SERVER_PROCESS.wait()
+            console.print("[green]✓ Phishing server killed.[/green]")
+        except Exception as e:
+            console.print(f"[bold red]✗ Error stopping phishing server: {e}[/bold red]")
+        PHISHING_SERVER_PROCESS = None
+    else:
+        console.print("[yellow]Phishing server is not running or process info unavailable.[/yellow]")
+
+    # 2. Offer to clear log files
+    config = get_config()
+    if config.phishing_site_path:
+        log_dir = Path(config.phishing_site_path) / "logs"
+        if log_dir.is_dir():
+            if Confirm.ask(f"\nDo you want to clear log files in '{log_dir}'?", default=False):
+                try:
+                    for item in log_dir.iterdir():
+                        if item.is_file():
+                            item.unlink()
+                            console.print(f"  Deleted: {item.name}")
+                    console.print("[green]✓ Log files cleared.[/green]")
+                except Exception as e:
+                    console.print(f"[bold red]✗ Error clearing log files: {e}[/bold red]")
+        else:
+            console.print(f"[yellow]Log directory '{log_dir}' not found, cannot clear logs.[/yellow]")
+    else:
+        console.print("[yellow]Phishing site path not configured, cannot clear logs.[/yellow]")
+
+    console.print("\n[bold green]Phishing simulation cleanup process finished.[/bold green]")
+    pause()
 
 if __name__ == "__main__":
     run_interactive_cli()
