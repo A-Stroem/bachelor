@@ -1437,7 +1437,8 @@ def custom_test_menu() -> None:
     # Show available custom test options
     console.print("[bold]Available Custom Tests:[/bold]")
     console.print("1. Phishing Simulation")
-    console.print("2. Back to Run Test Menu")
+    console.print("2. ClickFix Simulation")
+    console.print("3. Back to Run Test Menu")
     
     choice = IntPrompt.ask("Enter your choice", default=1)
     
@@ -1445,6 +1446,9 @@ def custom_test_menu() -> None:
         # Run phishing simulation
         phishing_simulation_menu()
     elif choice == 2:
+        # Run ClickFix simulation
+        clickfix_simulation_menu()
+    elif choice == 3:
         # Go back
         return
     else:
@@ -1888,6 +1892,10 @@ def cleanup_phishing_simulation() -> None:
 
     console.print("\n[bold green]Phishing simulation cleanup process finished.[/bold green]")
     pause()
+
+
+def clickfix_simulation_menu() -> None:
+    
 
 if __name__ == "__main__":
     run_interactive_cli()
