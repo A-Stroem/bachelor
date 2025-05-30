@@ -1893,9 +1893,5 @@ def cleanup_phishing_simulation() -> None:
     console.print("\n[bold green]Phishing simulation cleanup process finished.[/bold green]")
     pause()
 
-
-def clickfix_simulation_menu() -> None:
-    
-
 if __name__ == "__main__":
     run_interactive_cli()
