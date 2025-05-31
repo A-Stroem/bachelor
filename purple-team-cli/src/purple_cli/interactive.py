@@ -1889,9 +1889,80 @@ def cleanup_phishing_simulation() -> None:
             console.print(f"[yellow]Log directory '{log_dir}' not found, cannot clear logs.[/yellow]")
     else:
         console.print("[yellow]Phishing site path not configured, cannot clear logs.[/yellow]")
-
+    
     console.print("\n[bold green]Phishing simulation cleanup process finished.[/bold green]")
     pause()
+
+
+def clickfix_simulation_menu() -> None:
+    """Display the ClickFix simulation menu and execute the simulation."""
+    print_header("ClickFix Simulation")
+    
+    console.print("[bold]ClickFix Simulation Options:[/bold]")
+    console.print("1. Run ClickFix Simulation")
+    console.print("2. Back to Custom Tests Menu")
+    
+    choice = IntPrompt.ask("Enter your choice", default=1)
+    
+    if choice == 1:
+        run_clickfix_simulation()
+        clickfix_simulation_menu()
+    elif choice == 2:
+        return
+    else:
+        console.print("[bold red]Invalid choice.[/bold red]")
+        pause()
+        clickfix_simulation_menu()
+
+
+def run_clickfix_simulation() -> None:
+    """Executes the ClickFix simulation by running the start_clickfix_flow.py script."""
+    print_header("Executing ClickFix Simulation")
+    
+    # Path to the ClickFix script
+    clickfix_script_path = Path("d:/Bahelor_IT_Sikkerhed_2025/bachelor/clickfix_site/start_clickfix_flow.py")
+    
+    if not clickfix_script_path.exists():
+        console.print(f"[bold red]ClickFix script not found at: {clickfix_script_path}[/bold red]")
+        console.print("Please ensure the ClickFix site is properly set up.")
+        pause()
+        return
+    
+    console.print("[italic]Starting ClickFix simulation...[/italic]")
+    console.print("This will start the ClickFix website and send phishing emails.")
+    
+    if not Confirm.ask("Continue with ClickFix simulation?", default=True):
+        console.print("[yellow]ClickFix simulation cancelled.[/yellow]")
+        pause()
+        return
+    
+    try:
+        # Run the ClickFix script
+        result = subprocess.run(
+            [sys.executable, str(clickfix_script_path)],
+            cwd=clickfix_script_path.parent,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode == 0:
+            console.print("[bold green]✓ ClickFix simulation completed successfully![/bold green]")
+            if result.stdout:
+                console.print(f"\n[dim]Output:[/dim]\n{result.stdout}")
+        else:
+            console.print(f"[bold red]✗ ClickFix simulation failed with exit code {result.returncode}[/bold red]")
+            if result.stderr:
+                console.print(f"\n[dim]Error:[/dim]\n{result.stderr}")
+                
+    except subprocess.TimeoutExpired:
+        console.print("[bold red]✗ ClickFix simulation timed out after 5 minutes[/bold red]")
+    except Exception as e:
+        console.print(f"[bold red]✗ Error running ClickFix simulation: {e}[/bold red]")
+    
+    console.print("\n[italic]Note: The ClickFix website should now be running at http://localhost:3001/clickfix[/italic]")
+    console.print("[italic]Check the terminal output above for email sending results.[/italic]")
+    pause()
+
 
 if __name__ == "__main__":
     run_interactive_cli()

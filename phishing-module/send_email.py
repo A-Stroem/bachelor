@@ -104,7 +104,7 @@ def send_emails(recipients, template_html):
 
                     msg['Subject'] = "Test Email XEA"
                     # Format the From header to include a display name
-                    msg['From'] = f"Xea-Strike <{EMAIL_ADDRESS}>"
+                    msg['From'] = f"Microsoft <{EMAIL_ADDRESS}>"
                     msg['To'] = recipient['email']
                     # Keep the Reply-To header if you still want replies directed elsewhere
                     msg['Reply-To'] = EMAIL_ADDRESS
