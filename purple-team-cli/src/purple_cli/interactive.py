@@ -2067,7 +2067,8 @@ def custom_test_menu() -> None:
     console.print("[bold]Available Custom Tests:[/bold]")
     console.print("1. Phishing Simulation")
     console.print("2. ClickFix Simulation")
-    console.print("3. Back to Run Test Menu")
+    console.print("3. Escalation Flow Simulation")
+    console.print("4. Back to Run Test Menu")
     
     choice = IntPrompt.ask("Enter your choice", default=1)
     
@@ -2078,14 +2079,15 @@ def custom_test_menu() -> None:
         # Run ClickFix simulation
         clickfix_simulation_menu()
     elif choice == 3:
+        # Run Escalation Flow simulation
+        run_escalation_flow()
+    elif choice == 4:
         # Go back
         return
     else:
         console.print("[bold red]Invalid choice.[/bold red]")
         pause()
         custom_test_menu()  # Show the menu again
-
-
 
 def check_phishing_prerequisites(verbose: bool = True) -> bool:
     """Checks if all prerequisites for the phishing simulation are present."""
