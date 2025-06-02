@@ -1920,7 +1920,7 @@ def run_clickfix_simulation() -> None:
     print_header("Executing ClickFix Simulation")
     
     # Path to the ClickFix script
-    clickfix_script_path = Path("d:/Bahelor_IT_Sikkerhed_2025/bachelor/clickfix_site/start_clickfix_flow.py")
+    clickfix_script_path = Path("../clickfix_site/start_clickfix_flow.py")
     
     if not clickfix_script_path.exists():
         console.print(f"[bold red]ClickFix script not found at: {clickfix_script_path}[/bold red]")
@@ -1956,6 +1956,10 @@ def run_clickfix_simulation() -> None:
                 
     except subprocess.TimeoutExpired:
         console.print("[bold red]✗ ClickFix simulation timed out after 5 minutes[/bold red]")
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped monitoring credentials.[/yellow]")
+
     except Exception as e:
         console.print(f"[bold red]✗ Error running ClickFix simulation: {e}[/bold red]")
     
