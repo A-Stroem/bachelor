@@ -1,0 +1,10 @@
+admin
+administrator
+user
+guest
+test
+root
+service
+support
+localadmin
+sshtest

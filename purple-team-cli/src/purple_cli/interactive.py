@@ -5,6 +5,7 @@ import yaml
 from pathlib import Path
 import re 
 import subprocess
+import socket
 import shutil
 import importlib.util
 import time
@@ -923,6 +924,634 @@ def run_test_menu() -> None:
         console.print(f"\n[bold red]Operation failed:[/bold red] {output}")
     
     pause()
+
+# Global variable to store actions taken during the simulation
+simulation_actions = []
+
+def is_nmap_installed() -> bool:
+    """Check if Nmap is installed by looking in common paths and using Get-Command.  Also returns the path."""
+    nmap_executable = "nmap.exe"
+    common_paths = [
+        "C:\\Program Files\\Nmap",
+        "C:\\Program Files (x86)\\Nmap"
+    ]
+
+    # Check common installation paths
+    for path in common_paths:
+        full_path = os.path.join(path, nmap_executable)
+        if os.path.exists(full_path):
+            console.print(f"[bold green]Nmap found in: {full_path}[/bold green]")
+            return True, full_path
+
+    # Fallback to Get-Command (for PATH-based detection)
+    try:
+        process = subprocess.run(
+            ["powershell", "-Command", "Get-Command nmap -ErrorAction SilentlyContinue"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if process.stdout.strip():
+            # Extract the path from the Get-Command output
+            match = re.search(r"Path\s*:\s*(.+)", process.stdout)
+            if match:
+                nmap_path_from_command = match.group(1).strip()
+                console.print(f"[bold green]Nmap found via Get-Command (system PATH): {nmap_path_from_command}[/bold green]")
+                return True, nmap_path_from_command
+            else:
+                console.print("[yellow]Nmap found via Get-Command, but path extraction failed.[/yellow]")
+                return True, "nmap" # Default to "nmap" in PATH
+        else:
+            console.print("[yellow]Nmap not found via Get-Command.[/yellow]")
+            return False, None
+    except Exception as e:
+        console.print(f"[bold red]Error checking Nmap installation (Get-Command):[/bold red] {e}")
+        return False, None
+
+    console.print("[yellow]Nmap not found in common installation paths.[/yellow]")
+    return False, None
+
+
+
+def install_nmap() -> bool:
+    """Attempt to install Nmap automatically and guide for re-run."""
+    console.print("[yellow]Nmap is not installed.[/yellow]")
+    if Confirm.ask("Do you want to attempt to install Nmap automatically? (May trigger a UAC prompt)", default=False):
+        console.print("[italic]Attempting to download and install Nmap...[/italic]")
+        nmap_url = "https://nmap.org/dist/nmap-7.95-setup.exe" 
+        output_path = os.path.join(os.environ.get("TEMP"), "nmap-setup.exe")
+        powershell_command = f"""
+            Invoke-WebRequest -Uri '{nmap_url}' -OutFile '{output_path}';
+            Start-Process -FilePath '{output_path}' -Wait
+        """
+        try:
+            install_process = subprocess.run(
+                ["powershell", "-Command", powershell_command],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if install_process.returncode == 0:
+                console.print("[green]Nmap installation initiated. Please follow the installer prompts.[/green]")
+                console.print("[bold green]Waiting for Nmap installation to complete...[/bold green]")
+                # Wait for the Nmap executable to appear.
+                timeout = 300  # seconds
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    found, path = is_nmap_installed()
+                    if found:
+                        console.print("[bold green]Nmap installation detected.[/bold green]")
+                        return True, path  # Return True and the path
+                    time.sleep(5)  # Check every 5 seconds
+                console.print("[bold red]Nmap installation failed to complete within the timeout.[/bold red]")
+                console.print("[yellow]Please install Nmap manually from https://nmap.org/download.html[/yellow]")
+                return False, None
+            else:
+                console.print(f"[bold red]Error initiating Nmap installation:[/bold red] {install_process.stderr}")
+                console.print("[yellow]Please follow the installer prompts if they appeared.[/yellow]")
+                console.print("[italic]You might need to manually run the installer from {output_path} if it didn't start automatically.[/italic]")
+                console.print("[bold yellow]After installing, please close this terminal and run the Purple Team CLI again.[/bold yellow]")
+                input("[bold]Press Enter to exit the Purple Team CLI.[/bold]")
+                exit(1)
+        except Exception as e:
+            console.print(f"[bold red]An unexpected error occurred during Nmap installation attempt:[/bold red] {e}")
+            console.print("[italic]You can also install Nmap manually from https://nmap.org/download.html[/italic]")
+            return False, None
+    else:
+        console.print("[yellow]Automatic Nmap installation cancelled by user.[/yellow]")
+        console.print("[italic]Please install Nmap manually from https://nmap.org/download.html[/italic]")
+        if Confirm.ask("Have you installed Nmap?", default=False):
+            found, path = is_nmap_installed()
+            return found, path
+        else:
+            console.print("[red]Nmap installation not confirmed. Escalation flow cannot continue.[/red]")
+            return False, None
+    return False, None
+
+
+def get_local_ip() -> str:
+    """Get the local IP address on the network."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def cleanup():
+    """Reverses actions taken during the escalation flow simulation."""
+    global simulation_actions
+    console.print("[yellow]Performing cleanup for escalation flow...[/yellow]")
+    if not simulation_actions:
+        console.print("[green]No actions to clean up.[/green]")
+        return
+
+    # Iterate through actions in reverse order
+    for action in reversed(simulation_actions):
+        action_type = action["type"]
+        data = action["data"]
+
+        if action_type == "create_file":
+            filepath = data["filepath"]
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                    console.print(f"[cyan]Deleted file: {filepath}[/cyan]")
+                except Exception as e:
+                    console.print(f"[bold red]Error deleting file {filepath}: {e}[/bold red]")
+            else:
+                console.print(f"[cyan]File {filepath} not found, skipping deletion.[/cyan]")
+
+        elif action_type == "create_directory":
+            dirpath = data["dirpath"]
+            if os.path.exists(dirpath):
+                try:
+                    shutil.rmtree(dirpath)
+                    console.print(f"[cyan]Deleted directory: {dirpath}[/cyan]")
+                except Exception as e:
+                    console.print(f"[bold red]Error deleting directory {dirpath}: {e}[/bold red]")
+            else:
+                console.print(f"[cyan]Directory {dirpath} not found, skipping deletion.[/cyan]")
+
+        elif action_type == "modify_registry":
+            key_path = data["key_path"]
+            value_name = data["value_name"]
+            try:
+                powershell_command = f"""
+                    Remove-ItemProperty -Path '{key_path}' -Name '{value_name}' -Force -ErrorAction SilentlyContinue
+                """
+                subprocess.run(["powershell", "-Command", powershell_command], check=True, capture_output=True, text=True)
+                console.print(f"[cyan]Removed registry value: {value_name} from {key_path}[/cyan]")
+            except Exception as e:
+                console.print(f"[bold red]Error removing registry value {value_name} from {key_path}: {e}[/bold red]")
+
+        elif action_type == "start_service":
+            service_name = data["service_name"]
+            try:
+                powershell_command = f"Stop-Service -Name '{service_name}' -Force"
+                subprocess.run(["powershell", "-Command", powershell_command], check=True, capture_output=True, text=True)
+                console.print(f"[cyan]Stopped service: {service_name}[/cyan]")
+            except Exception as e:
+                 console.print(f"[bold red]Error stopping service {service_name}: {e}[/bold red]")
+
+        elif action_type == "disable_firewall_rule":
+            rule_name = data["rule_name"]
+            try:
+                powershell_command = f"Disable-NetFirewallRule -Name '{rule_name}'"
+                subprocess.run(["powershell", "-Command", powershell_command], check=True, capture_output=True, text=True)
+                console.print(f"[cyan]Disabled firewall rule: {rule_name}[/cyan]")
+            except Exception as e:
+                console.print(f"[bold red]Error disabling firewall rule {rule_name}: {e}[/bold red]")
+        else:
+            console.print(f"[yellow]Unknown action type '{action_type}'. Skipping cleanup.[/yellow]")
+
+    simulation_actions = []
+    console.print("[green]Cleanup completed.[/green]")
+
+
+def is_ncrack_installed() -> tuple[bool, str | None]:
+    """Check if Ncrack is installed and returns its path."""
+    ncrack_executable_name = "ncrack.exe"
+    
+    # Define common installation paths
+    common_ncrack_install_paths = [
+        "C:\\Program Files (x86)\\Ncrack", 
+        "C:\\Program Files\\Ncrack",
+        "C:\\Program Files (x86)\\Nmap",
+        "C:\\Program Files\\Nmap",
+        "C:\\Tools\\Ncrack",
+        os.path.expanduser("~\\Tools\\Ncrack")
+    ]
+
+    console.print("[yellow]Checking for Ncrack in common installation paths...[/yellow]")
+    # Check if ncrack.exe exists in common known installation paths
+    for install_path in common_ncrack_install_paths:
+        ncrack_path = os.path.join(install_path, ncrack_executable_name)
+        console.print(f"  Attempting to find '{ncrack_executable_name}' in '{install_path}'...")
+        if os.path.exists(ncrack_path):
+            console.print(f"[bold green]Ncrack found in: {ncrack_path}[/bold green]")
+            return True, ncrack_path
+
+    console.print("[yellow]Ncrack not found in predefined installation paths. Checking system PATH...[/yellow]")
+    # Fallback to Get-Command
+    try:
+        # Get-Command will return the full path if found in PATH
+        
+        test_command = subprocess.run(
+            ["powershell", "-Command", "Get-Command NonExistentCommand -ErrorAction SilentlyContinue | Out-String"],
+            capture_output=True, text=True, check=False
+        )
+        
+
+        process = subprocess.run(
+            ["powershell", "-Command", "Get-Command ncrack -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path"],
+            capture_output=True,
+            text=True,
+            check=False 
+        )
+        found_path = process.stdout.strip()
+        console.print(f"  PowerShell Get-Command output for Ncrack: '{found_path}'")
+
+        if found_path and os.path.exists(found_path):
+            console.print(f"[bold green]Ncrack found via system PATH: {found_path}[/bold green]")
+            return True, found_path
+        else:
+            console.print("[yellow]Ncrack not found via system PATH after Get-Command check.[/yellow]")
+            return False, None
+    except Exception as e:
+        console.print(f"[bold red]Error checking Ncrack installation (Get-Command):[/bold red] {e}")
+        return False, None
+
+    console.print("[bold red]Ncrack was not found in any common location or system PATH.[/bold red]")
+    return False, None
+
+def install_ncrack() -> tuple[bool, str | None]:
+    """
+    Automates the download and installation of Ncrack using its official setup.exe.
+    Requires administrator privileges.
+    """
+    console.print("[bold red]Ncrack is not installed.[/bold red]")
+    console.print("[bold yellow]Attempting to automatically download and install Ncrack.[/bold yellow]")
+    console.print("[bold cyan]This operation requires Administrator privileges and may pop up a UAC prompt.[/bold cyan]")
+
+    if not is_admin():
+        console.print("[bold red]Please run this script as Administrator to allow automatic installation of Ncrack.[/bold red]")
+        console.print("[yellow]Otherwise, you will need to download and install Ncrack manually from nmap.org/ncrack/dist.[/yellow]")
+        return False, None # Cannot proceed with auto-install without admin
+
+    # Direct download URL for the Ncrack setup.exe
+    ncrack_setup_url = "https://nmap.org/ncrack/dist/ncrack-0.7-setup.exe"
+    
+    download_dir = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "Ncrack_Installer")
+    os.makedirs(download_dir, exist_ok=True)
+    setup_filename = os.path.basename(ncrack_setup_url)
+    setup_path = os.path.join(download_dir, setup_filename)
+    
+    console.print(f"[green]Downloading Ncrack installer from {ncrack_setup_url} to {setup_path} using PowerShell...[/green]")
+    
+    # Use PowerShell's Invoke-WebRequest to download the file
+    powershell_download_command = f"""
+        Invoke-WebRequest -Uri '{ncrack_setup_url}' -OutFile '{setup_path}';
+    """
+    try:
+        download_process = subprocess.run(
+            ["powershell", "-Command", powershell_download_command],
+            capture_output=True,
+            text=True,
+            check=False 
+        )
+        if download_process.returncode == 0:
+            console.print("[green]Download complete.[/green]")
+        else:
+            console.print(f"[bold red]Failed to download Ncrack installer via PowerShell:[/bold red] {download_process.stderr}")
+            console.print("[yellow]Please check your internet connection or try installing Ncrack manually.[/yellow]")
+            return False, None
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred during download attempt:[/bold red] {e}")
+        return False, None
+
+    console.print(f"[green]Running Ncrack installer ({setup_path})...[/green]")
+    console.print("[italic]Please follow the instructions in the installer window that appears.[/italic]")
+    console.print("[italic]Make sure to check the option to add Ncrack to your system PATH during installation.[/italic]")
+    
+    try:
+        subprocess.run([setup_path], check=True, shell=True) # check=True will raise CalledProcessError if installer fails
+        
+        console.print("[green]Ncrack installer finished. Verifying installation...[/green]")
+        console.print("[bold yellow]You may need to close and reopen this terminal or VS Code to apply PATH changes after the installer finishes.[/bold yellow]")
+
+        
+        time.sleep(5) 
+        
+        # Verify Ncrack is now found
+        found, ncrack_exec_path = is_ncrack_installed()
+        if found:
+            console.print("[bold green]Ncrack successfully installed and configured![/bold green]")
+            return True, ncrack_exec_path
+        else:
+            console.print("[bold red]Ncrack was not detected after installation. Manual verification or re-run might be needed.[/bold red]")
+            console.print("[yellow]Ensure you checked the option to add Ncrack to system PATH during installation.[/yellow]")
+            return False, None
+
+    except subprocess.CalledProcessError as e:
+        console.print(f"[bold red]Ncrack installer failed or was cancelled.[/bold red]")
+        console.print(f"[italic]Error: {e}[/italic]")
+        console.print("[yellow]Please try installing Ncrack manually from nmap.org/ncrack/dist.[/yellow]")
+        return False, None
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred while running the installer:[/bold red] {e}")
+        console.print("[yellow]Please try installing Ncrack manually from nmap.org/ncrack/dist.[/yellow]")
+        return False, None
+
+
+def perform_bruteforce(target_ip: str, port: str, service_module: str, user_list_path: str, pass_list_path: str, ncrack_path: str) -> tuple[bool, str]:
+    """
+    Performs a brute-force attack using Ncrack against a specified service.
+    Uses the recommended 'service://target_ip:port' syntax for Ncrack.
+    Handles Ncrack execution and live output.
+    Args:
+        target_ip: The target IP address.
+        port: The target port number as a string.
+        service_module: The Ncrack service module (e.g., 'ssh', 'smb').
+        user_list_path: Path to the username wordlist.
+        pass_list_path: Path to the password wordlist.
+        ncrack_path: The full path to the Ncrack executable.
+    Returns:
+        A tuple of (bool, str) where bool is True if Ncrack command was
+        successfully *executed* (regardless of credentials found), and str
+        is the output or an error message.
+    """
+    if not ncrack_path or not os.path.exists(ncrack_path):
+        return False, f"Error: Ncrack executable not found at '{ncrack_path}'. Cannot perform brute-force."
+
+    service_target = f"{service_module}://{target_ip}:{port}" 
+
+    ncrack_command = [
+        ncrack_path,
+        "-U", user_list_path,
+        "-P", pass_list_path,
+        service_target, 
+        "-vv",
+        "-T4",
+        "--connection-limit", "5"
+    ]
+
+    full_command_str = ' '.join(ncrack_command)
+    print(f"Executing Ncrack command: {full_command_str}")
+    
+    try:
+        process = subprocess.Popen(ncrack_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+
+        found_credentials = False
+        live_output = []
+        
+        while True:
+            output_line = process.stdout.readline()
+            if output_line == '' and process.poll() is not None:
+                break
+            if output_line:
+                live_output.append(output_line.strip())
+                print(output_line.strip())
+                if "Discovered credentials" in output_line:
+                    found_credentials = True
+
+        stdout, stderr = process.communicate()
+        live_output.extend([line.strip() for line in stdout.splitlines() if line.strip()])
+        live_output.extend([line.strip() for line in stderr.splitlines() if line.strip()])
+
+        final_output_str = "\n".join(live_output)
+        
+        if process.returncode != 0:
+            error_message = f"Ncrack exited with error code: {process.returncode}\nStderr: {stderr}"
+            print(f"Ncrack error: {error_message}")
+            return False, final_output_str + "\n" + error_message
+
+        if found_credentials:
+            print("[bold green]Credentials found during brute-force![/bold green]")
+        else:
+            print("[bold yellow]No credentials found.[/bold yellow]")
+        
+        return True, final_output_str
+
+    except FileNotFoundError:
+        return False, f"Error: Ncrack executable not found at '{ncrack_path}'. Please ensure it's installed and accessible."
+    except Exception as e:
+        error_message = f"An unexpected error occurred during Ncrack brute-force: {e}"
+        print(f"[bold red]Critical error during Ncrack execution:[/bold red] {error_message}")
+        if 'process' in locals() and process.poll() is None:
+            process.terminate()
+            process.wait()
+        return False, error_message
+
+
+def run_escalation_flow(check_prereqs=False, get_prereqs=False, cleanup_flag=False, capture_output=True) -> tuple[bool, str]:
+    """Checks for Nmap and runs it to scan for open ports, then offers brute-force."""
+    global simulation_actions
+
+    # --- Initial check for flags ---
+    if check_prereqs:
+        return True, "Checking prerequisites: Ensure Nmap and Ncrack are installed."
+    if get_prereqs:
+        console.print("[yellow]Attempting automated Nmap and Ncrack installation if not found...[/yellow]")
+        return False, "Installation will be attempted in the main flow."
+    if cleanup_flag:
+        cleanup()
+        return True, "Cleanup completed."
+
+    # --- Nmap Check and Scan ---
+    nmap_path = None
+    found_nmap, nmap_path = is_nmap_installed()
+    if not found_nmap:
+        console.print("[bold yellow]Nmap not found. Attempting automatic installation...[/bold yellow]")
+        found_nmap, nmap_path = install_nmap()
+        if not found_nmap:
+            console.print("[bold red]Nmap installation failed. Escalation flow cannot continue.[/bold red]")
+            pause()
+            return False, "Nmap installation failed. Escalation flow cannot continue."
+
+    if not nmap_path:
+        console.print("[bold red]Nmap executable path could not be determined. Escalation flow cannot continue.[/bold red]")
+        pause()
+        return False, "Nmap executable path not determined."
+
+    target_ip = get_local_ip()
+    console.print(f"\n[bold yellow]Running Nmap scan on {target_ip}...[/bold yellow]")
+
+    open_ports_info = []
+    try:
+        nmap_command = [nmap_path, "-p-", "-sV", target_ip]
+        result = subprocess.run(
+            nmap_command,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        port_service_matches = re.findall(r"(\d+)/tcp\s+open\s+([a-zA-Z0-9_-]+)", result.stdout)
+        
+        
+        for port, service in port_service_matches:
+            open_ports_info.append({"port": int(port), "service": service})
+        
+        
+        open_ports_info.sort(key=lambda x: x["port"])
+
+        if open_ports_info:
+            ports_str_display = ", ".join([f"{p['port']} ({p['service']})" for p in open_ports_info])
+            output = f"Nmap scan completed on {target_ip}. Open ports: {ports_str_display}"
+        else:
+            output = f"Nmap scan completed on {target_ip}. No open ports found."
+        
+        console.print(output)
+        scan_success = True
+    except subprocess.CalledProcessError as e:
+        output = f"Nmap scan failed:\n{e.stderr}"
+        scan_success = False
+        console.print(f"[bold red]Nmap scan error:[/bold red] {output}")
+    except FileNotFoundError:
+        output = f"Nmap executable not found at path: {nmap_path}"
+        scan_success = False
+        console.print(f"[bold red]Error:[/bold red] {output}")
+    except Exception as e:
+        output = f"An unexpected error occurred during Nmap scan: {e}"
+        scan_success = False
+        console.print(f"[bold red]An unexpected Nmap error occurred:[/bold red] {output}")
+
+    if not scan_success:
+        pause()
+        return False, output
+
+    
+    if open_ports_info:
+        while True:
+            console.print("\n[bold]Choose an action:[/bold]")
+            console.print("[bold cyan]1.[/bold cyan] Continue with a specific port (Brute-force / further actions)")
+            console.print("[bold cyan]2.[/bold cyan] Perform Cleanup")
+            console.print("[bold cyan]0.[/bold cyan] Go back to main menu")
+
+            action_choice = IntPrompt.ask("Enter your choice", choices=["0", "1", "2"], default=0)
+
+            if action_choice == 1:
+                table = Table(title="Available Open Ports")
+                table.add_column("No.", style="cyan", no_wrap=True)
+                table.add_column("Port", style="magenta")
+                table.add_column("Service", style="green")
+
+                for i, port_info in enumerate(open_ports_info):
+                    table.add_row(str(i + 1), str(port_info["port"]), port_info["service"])
+                
+                console.print(table)
+
+                port_choice_str = Prompt.ask("Select a port number (1-{}) or 0 to go back".format(len(open_ports_info)), default="0")
+                try:
+                    port_choice_idx = int(port_choice_str)
+                    if port_choice_idx == 0:
+                        continue
+                    elif 1 <= port_choice_idx <= len(open_ports_info):
+                        selected_port_info = open_ports_info[port_choice_idx - 1]
+                        selected_port = str(selected_port_info["port"])
+                        selected_service_nmap = selected_port_info["service"]
+                        console.print(f"[italic]Selected port: {selected_port}, Service: {selected_service_nmap}[/italic]")
+
+                        ncrack_service_map = {
+                            "ssh": "ssh",
+                            "ftp": "ftp",
+                            "telnet": "telnet",
+                            "http": "http",
+                            "https": "https",
+                            "microsoft-ds": "smb",
+                            "netbios-ssn": "smb",
+                            "ms-wbt-server": "rdp",
+                        }
+                        
+                        selected_service_ncrack = ncrack_service_map.get(selected_service_nmap.lower())
+                        
+                        if not selected_service_ncrack:
+                            console.print(f"[bold red]No Ncrack module found for service: '{selected_service_nmap}'.[/bold red]")
+                            console.print("[yellow]Brute-force cannot proceed for this service. Please select another port/service.[/yellow]")
+                            pause()
+                            continue
+                        
+                        console.print(f"[italic]Mapped Nmap service '{selected_service_nmap}' to Ncrack module: '{selected_service_ncrack}'[/italic]")
+
+                        # Ncrack Installation Check
+                        ncrack_path = None
+                        found_ncrack, ncrack_path = is_ncrack_installed()
+                        if not found_ncrack:
+                            console.print("[bold yellow]Ncrack not found. Attempting automatic installation...[/bold yellow]")
+                            found_ncrack, ncrack_path = install_ncrack()
+                            if not found_ncrack:
+                                console.print("[bold red]Ncrack not available. Brute-force cannot proceed.[/bold red]")
+                                pause()
+                                return False, "Ncrack installation failed."
+                        
+                        if not ncrack_path:
+                            console.print("[bold red]Ncrack executable path could not be determined. Brute-force cannot proceed.[/bold red]")
+                            pause()
+                            return False, "Ncrack executable path not determined."
+
+                        
+                        console.print("\n[bold]Brute-force Wordlists Configuration:[/bold]")
+
+                        # Get the directory of the current script
+                        script_current_dir = os.path.dirname(os.path.abspath(__file__))
+                        
+                        
+                        default_wordlists_dir = os.path.join(script_current_dir, "wordlists")
+                        
+                        default_user_list_path = os.path.join(default_wordlists_dir, "common_users.txt")
+                        default_pass_list_path = os.path.join(default_wordlists_dir, "common_passwords.txt")
+
+                        # Prompt the user, suggesting the default paths
+                        user_list_path = Prompt.ask(
+                            f"Enter the full path to your username wordlist (default: [cyan]{default_user_list_path}[/cyan])",
+                            default=default_user_list_path
+                        )
+                        pass_list_path = Prompt.ask(
+                            f"Enter the full path to your password wordlist (default: [cyan]{default_pass_list_path}[/cyan])",
+                            default=default_pass_list_path
+                        )
+                        
+                        if not os.path.exists(user_list_path):
+                            console.print(f"[bold red]Error: Username wordlist not found at {user_list_path}. Returning to action menu.[/bold red]")
+                            pause()
+                            continue
+                        if not os.path.exists(pass_list_path):
+                            console.print(f"[bold red]Error: Password wordlist not found at {pass_list_path}. Returning to action menu.[/bold red]")
+                            pause()
+                            continue
+
+                        # --- Perform Brute-force ---
+                        bf_success, bf_output = perform_bruteforce(
+                            target_ip,
+                            selected_port,
+                            selected_service_ncrack,
+                            user_list_path,
+                            pass_list_path,
+                            ncrack_path
+                        )
+
+                        simulation_actions.append(f"Brute-force attempt on {selected_service_ncrack}@{target_ip}:{selected_port} {'succeeded' if bf_success else 'failed'}")
+                        console.print(f"\n[bold]{'Brute-force Succeeded!' if bf_success else 'Brute-force Failed.'}[/bold]")
+                        console.print(f"[italic]Output from Ncrack:[/italic]\n{bf_output}")
+                        
+                        pause()
+                        return True, "Brute-force flow completed."
+                    else:
+                        console.print("[red]Invalid port number. Please choose a number from the list or 0 to go back.[/red]")
+                except ValueError:
+                    console.print("[red]Invalid input. Please enter a number.[/red]")
+                
+            elif action_choice == 2:
+                cleanup()
+                pause()
+                return True, "Cleanup initiated by user."
+            
+            elif action_choice == 0:
+                return True, "User chose to go back from escalation flow."
+            
+            else:
+                console.print("[yellow]Invalid action choice. Please try again.[/yellow]")
+
+    else:
+        console.print("\n[bold]No open ports found. Choose an action:[/bold]")
+        console.print("[bold cyan]1.[/bold cyan] Perform Cleanup")
+        console.print("[bold cyan]0.[/bold cyan] Go back to main menu")
+
+        action_choice = IntPrompt.ask("Enter your choice", choices=["0", "1"], default=0)
+        if action_choice == 1:
+            cleanup()
+            pause()
+            return True, "Cleanup initiated by user (no open ports found)."
+        elif action_choice == 0:
+            return True, "User chose to go back (no open ports found)."
+        else:
+            return False, "Invalid action choice."
+
+    return True, "Escalation flow completed."
 
 
 def list_playbooks_menu() -> None:
