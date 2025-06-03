@@ -23,6 +23,8 @@ dependencies = [
     "typer[all]>=0.7.0,<1.0.0",
     "pyyaml>=6.0,<7.0",
     "rich>=12.0.0,<13.0.0",
+    "python-dotenv>=0.20.0,<2.0.0", # Added for phishing module
+    "requests>=2.20.0,<3.0.0",      # Added for phishing module (if needed)
 ]
 
 [project.optional-dependencies]

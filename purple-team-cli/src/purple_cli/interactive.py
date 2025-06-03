@@ -4,11 +4,18 @@ from typing import Dict, List, Optional, Callable, Tuple, Any, Set # Added Any, 
 import yaml
 from pathlib import Path
 import re 
+import subprocess
+import socket
+import shutil
+import importlib.util
+import time
+import json # Added for parsing credentials
 
 from rich.console import Console
 from rich.prompt import Prompt, IntPrompt, Confirm 
 from rich.panel import Panel
 from rich.table import Table
+from rich import markup # Added for escaping markup
 # Removed unused rprint import
 
 # Removed unused list_available_tests import
@@ -39,6 +46,13 @@ TACTICS = {
 # {platform: {tactic: {technique_id: {name, platforms, phases, has_tests}}}}
 INDEX_DATA_CACHE: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
 AVAILABLE_PLATFORMS: List[str] = []
+
+# Prerequisites for Phishing Simulation
+REQUIRED_PYTHON_PACKAGES_PHISHING: List[str] = ["requests", "python-dotenv"] # Example: adjust as needed
+
+# Global variable to store the phishing server process
+PHISHING_SERVER_PROCESS: Optional[subprocess.Popen] = None
+
 
 def get_index_dir() -> Optional[Path]:
     """Gets the path to the Indexes directory within the configured atomics path."""
@@ -650,6 +664,7 @@ def run_test_menu() -> None:
     console.print("[bold]Select a technique to run:[/bold]")
     console.print("1. Enter technique ID directly")
     console.print("2. Browse available techniques")
+    console.print("3. Custom tests")
     
     choice = IntPrompt.ask("Enter your choice", default=1)
     
@@ -826,6 +841,10 @@ def run_test_menu() -> None:
             console.print("[bold red]Invalid choice.[/bold red]")
             pause()
             return
+    elif choice == 3:
+        # Custom tests menu
+        custom_test_menu()
+        return
     else:
         console.print("[bold red]Invalid choice.[/bold red]")
         pause()
@@ -905,6 +924,634 @@ def run_test_menu() -> None:
         console.print(f"\n[bold red]Operation failed:[/bold red] {output}")
     
     pause()
+
+# Global variable to store actions taken during the simulation
+simulation_actions = []
+
+def is_nmap_installed() -> bool:
+    """Check if Nmap is installed by looking in common paths and using Get-Command.  Also returns the path."""
+    nmap_executable = "nmap.exe"
+    common_paths = [
+        "C:\\Program Files\\Nmap",
+        "C:\\Program Files (x86)\\Nmap"
+    ]
+
+    # Check common installation paths
+    for path in common_paths:
+        full_path = os.path.join(path, nmap_executable)
+        if os.path.exists(full_path):
+            console.print(f"[bold green]Nmap found in: {full_path}[/bold green]")
+            return True, full_path
+
+    # Fallback to Get-Command (for PATH-based detection)
+    try:
+        process = subprocess.run(
+            ["powershell", "-Command", "Get-Command nmap -ErrorAction SilentlyContinue"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if process.stdout.strip():
+            # Extract the path from the Get-Command output
+            match = re.search(r"Path\s*:\s*(.+)", process.stdout)
+            if match:
+                nmap_path_from_command = match.group(1).strip()
+                console.print(f"[bold green]Nmap found via Get-Command (system PATH): {nmap_path_from_command}[/bold green]")
+                return True, nmap_path_from_command
+            else:
+                console.print("[yellow]Nmap found via Get-Command, but path extraction failed.[/yellow]")
+                return True, "nmap" # Default to "nmap" in PATH
+        else:
+            console.print("[yellow]Nmap not found via Get-Command.[/yellow]")
+            return False, None
+    except Exception as e:
+        console.print(f"[bold red]Error checking Nmap installation (Get-Command):[/bold red] {e}")
+        return False, None
+
+    console.print("[yellow]Nmap not found in common installation paths.[/yellow]")
+    return False, None
+
+
+
+def install_nmap() -> bool:
+    """Attempt to install Nmap automatically and guide for re-run."""
+    console.print("[yellow]Nmap is not installed.[/yellow]")
+    if Confirm.ask("Do you want to attempt to install Nmap automatically? (May trigger a UAC prompt)", default=False):
+        console.print("[italic]Attempting to download and install Nmap...[/italic]")
+        nmap_url = "https://nmap.org/dist/nmap-7.95-setup.exe" 
+        output_path = os.path.join(os.environ.get("TEMP"), "nmap-setup.exe")
+        powershell_command = f"""
+            Invoke-WebRequest -Uri '{nmap_url}' -OutFile '{output_path}';
+            Start-Process -FilePath '{output_path}' -Wait
+        """
+        try:
+            install_process = subprocess.run(
+                ["powershell", "-Command", powershell_command],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if install_process.returncode == 0:
+                console.print("[green]Nmap installation initiated. Please follow the installer prompts.[/green]")
+                console.print("[bold green]Waiting for Nmap installation to complete...[/bold green]")
+                # Wait for the Nmap executable to appear.
+                timeout = 300  # seconds
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    found, path = is_nmap_installed()
+                    if found:
+                        console.print("[bold green]Nmap installation detected.[/bold green]")
+                        return True, path  # Return True and the path
+                    time.sleep(5)  # Check every 5 seconds
+                console.print("[bold red]Nmap installation failed to complete within the timeout.[/bold red]")
+                console.print("[yellow]Please install Nmap manually from https://nmap.org/download.html[/yellow]")
+                return False, None
+            else:
+                console.print(f"[bold red]Error initiating Nmap installation:[/bold red] {install_process.stderr}")
+                console.print("[yellow]Please follow the installer prompts if they appeared.[/yellow]")
+                console.print("[italic]You might need to manually run the installer from {output_path} if it didn't start automatically.[/italic]")
+                console.print("[bold yellow]After installing, please close this terminal and run the Purple Team CLI again.[/bold yellow]")
+                input("[bold]Press Enter to exit the Purple Team CLI.[/bold]")
+                exit(1)
+        except Exception as e:
+            console.print(f"[bold red]An unexpected error occurred during Nmap installation attempt:[/bold red] {e}")
+            console.print("[italic]You can also install Nmap manually from https://nmap.org/download.html[/italic]")
+            return False, None
+    else:
+        console.print("[yellow]Automatic Nmap installation cancelled by user.[/yellow]")
+        console.print("[italic]Please install Nmap manually from https://nmap.org/download.html[/italic]")
+        if Confirm.ask("Have you installed Nmap?", default=False):
+            found, path = is_nmap_installed()
+            return found, path
+        else:
+            console.print("[red]Nmap installation not confirmed. Escalation flow cannot continue.[/red]")
+            return False, None
+    return False, None
+
+
+def get_local_ip() -> str:
+    """Get the local IP address on the network."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def cleanup():
+    """Reverses actions taken during the escalation flow simulation."""
+    global simulation_actions
+    console.print("[yellow]Performing cleanup for escalation flow...[/yellow]")
+    if not simulation_actions:
+        console.print("[green]No actions to clean up.[/green]")
+        return
+
+    # Iterate through actions in reverse order
+    for action in reversed(simulation_actions):
+        action_type = action["type"]
+        data = action["data"]
+
+        if action_type == "create_file":
+            filepath = data["filepath"]
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                    console.print(f"[cyan]Deleted file: {filepath}[/cyan]")
+                except Exception as e:
+                    console.print(f"[bold red]Error deleting file {filepath}: {e}[/bold red]")
+            else:
+                console.print(f"[cyan]File {filepath} not found, skipping deletion.[/cyan]")
+
+        elif action_type == "create_directory":
+            dirpath = data["dirpath"]
+            if os.path.exists(dirpath):
+                try:
+                    shutil.rmtree(dirpath)
+                    console.print(f"[cyan]Deleted directory: {dirpath}[/cyan]")
+                except Exception as e:
+                    console.print(f"[bold red]Error deleting directory {dirpath}: {e}[/bold red]")
+            else:
+                console.print(f"[cyan]Directory {dirpath} not found, skipping deletion.[/cyan]")
+
+        elif action_type == "modify_registry":
+            key_path = data["key_path"]
+            value_name = data["value_name"]
+            try:
+                powershell_command = f"""
+                    Remove-ItemProperty -Path '{key_path}' -Name '{value_name}' -Force -ErrorAction SilentlyContinue
+                """
+                subprocess.run(["powershell", "-Command", powershell_command], check=True, capture_output=True, text=True)
+                console.print(f"[cyan]Removed registry value: {value_name} from {key_path}[/cyan]")
+            except Exception as e:
+                console.print(f"[bold red]Error removing registry value {value_name} from {key_path}: {e}[/bold red]")
+
+        elif action_type == "start_service":
+            service_name = data["service_name"]
+            try:
+                powershell_command = f"Stop-Service -Name '{service_name}' -Force"
+                subprocess.run(["powershell", "-Command", powershell_command], check=True, capture_output=True, text=True)
+                console.print(f"[cyan]Stopped service: {service_name}[/cyan]")
+            except Exception as e:
+                 console.print(f"[bold red]Error stopping service {service_name}: {e}[/bold red]")
+
+        elif action_type == "disable_firewall_rule":
+            rule_name = data["rule_name"]
+            try:
+                powershell_command = f"Disable-NetFirewallRule -Name '{rule_name}'"
+                subprocess.run(["powershell", "-Command", powershell_command], check=True, capture_output=True, text=True)
+                console.print(f"[cyan]Disabled firewall rule: {rule_name}[/cyan]")
+            except Exception as e:
+                console.print(f"[bold red]Error disabling firewall rule {rule_name}: {e}[/bold red]")
+        else:
+            console.print(f"[yellow]Unknown action type '{action_type}'. Skipping cleanup.[/yellow]")
+
+    simulation_actions = []
+    console.print("[green]Cleanup completed.[/green]")
+
+
+def is_ncrack_installed() -> tuple[bool, str | None]:
+    """Check if Ncrack is installed and returns its path."""
+    ncrack_executable_name = "ncrack.exe"
+    
+    # Define common installation paths
+    common_ncrack_install_paths = [
+        "C:\\Program Files (x86)\\Ncrack", 
+        "C:\\Program Files\\Ncrack",
+        "C:\\Program Files (x86)\\Nmap",
+        "C:\\Program Files\\Nmap",
+        "C:\\Tools\\Ncrack",
+        os.path.expanduser("~\\Tools\\Ncrack")
+    ]
+
+    console.print("[yellow]Checking for Ncrack in common installation paths...[/yellow]")
+    # Check if ncrack.exe exists in common known installation paths
+    for install_path in common_ncrack_install_paths:
+        ncrack_path = os.path.join(install_path, ncrack_executable_name)
+        console.print(f"  Attempting to find '{ncrack_executable_name}' in '{install_path}'...")
+        if os.path.exists(ncrack_path):
+            console.print(f"[bold green]Ncrack found in: {ncrack_path}[/bold green]")
+            return True, ncrack_path
+
+    console.print("[yellow]Ncrack not found in predefined installation paths. Checking system PATH...[/yellow]")
+    # Fallback to Get-Command
+    try:
+        # Get-Command will return the full path if found in PATH
+        
+        test_command = subprocess.run(
+            ["powershell", "-Command", "Get-Command NonExistentCommand -ErrorAction SilentlyContinue | Out-String"],
+            capture_output=True, text=True, check=False
+        )
+        
+
+        process = subprocess.run(
+            ["powershell", "-Command", "Get-Command ncrack -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path"],
+            capture_output=True,
+            text=True,
+            check=False 
+        )
+        found_path = process.stdout.strip()
+        console.print(f"  PowerShell Get-Command output for Ncrack: '{found_path}'")
+
+        if found_path and os.path.exists(found_path):
+            console.print(f"[bold green]Ncrack found via system PATH: {found_path}[/bold green]")
+            return True, found_path
+        else:
+            console.print("[yellow]Ncrack not found via system PATH after Get-Command check.[/yellow]")
+            return False, None
+    except Exception as e:
+        console.print(f"[bold red]Error checking Ncrack installation (Get-Command):[/bold red] {e}")
+        return False, None
+
+    console.print("[bold red]Ncrack was not found in any common location or system PATH.[/bold red]")
+    return False, None
+
+def install_ncrack() -> tuple[bool, str | None]:
+    """
+    Automates the download and installation of Ncrack using its official setup.exe.
+    Requires administrator privileges.
+    """
+    console.print("[bold red]Ncrack is not installed.[/bold red]")
+    console.print("[bold yellow]Attempting to automatically download and install Ncrack.[/bold yellow]")
+    console.print("[bold cyan]This operation requires Administrator privileges and may pop up a UAC prompt.[/bold cyan]")
+
+    if not is_admin():
+        console.print("[bold red]Please run this script as Administrator to allow automatic installation of Ncrack.[/bold red]")
+        console.print("[yellow]Otherwise, you will need to download and install Ncrack manually from nmap.org/ncrack/dist.[/yellow]")
+        return False, None # Cannot proceed with auto-install without admin
+
+    # Direct download URL for the Ncrack setup.exe
+    ncrack_setup_url = "https://nmap.org/ncrack/dist/ncrack-0.7-setup.exe"
+    
+    download_dir = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "Ncrack_Installer")
+    os.makedirs(download_dir, exist_ok=True)
+    setup_filename = os.path.basename(ncrack_setup_url)
+    setup_path = os.path.join(download_dir, setup_filename)
+    
+    console.print(f"[green]Downloading Ncrack installer from {ncrack_setup_url} to {setup_path} using PowerShell...[/green]")
+    
+    # Use PowerShell's Invoke-WebRequest to download the file
+    powershell_download_command = f"""
+        Invoke-WebRequest -Uri '{ncrack_setup_url}' -OutFile '{setup_path}';
+    """
+    try:
+        download_process = subprocess.run(
+            ["powershell", "-Command", powershell_download_command],
+            capture_output=True,
+            text=True,
+            check=False 
+        )
+        if download_process.returncode == 0:
+            console.print("[green]Download complete.[/green]")
+        else:
+            console.print(f"[bold red]Failed to download Ncrack installer via PowerShell:[/bold red] {download_process.stderr}")
+            console.print("[yellow]Please check your internet connection or try installing Ncrack manually.[/yellow]")
+            return False, None
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred during download attempt:[/bold red] {e}")
+        return False, None
+
+    console.print(f"[green]Running Ncrack installer ({setup_path})...[/green]")
+    console.print("[italic]Please follow the instructions in the installer window that appears.[/italic]")
+    console.print("[italic]Make sure to check the option to add Ncrack to your system PATH during installation.[/italic]")
+    
+    try:
+        subprocess.run([setup_path], check=True, shell=True) # check=True will raise CalledProcessError if installer fails
+        
+        console.print("[green]Ncrack installer finished. Verifying installation...[/green]")
+        console.print("[bold yellow]You may need to close and reopen this terminal or VS Code to apply PATH changes after the installer finishes.[/bold yellow]")
+
+        
+        time.sleep(5) 
+        
+        # Verify Ncrack is now found
+        found, ncrack_exec_path = is_ncrack_installed()
+        if found:
+            console.print("[bold green]Ncrack successfully installed and configured![/bold green]")
+            return True, ncrack_exec_path
+        else:
+            console.print("[bold red]Ncrack was not detected after installation. Manual verification or re-run might be needed.[/bold red]")
+            console.print("[yellow]Ensure you checked the option to add Ncrack to system PATH during installation.[/yellow]")
+            return False, None
+
+    except subprocess.CalledProcessError as e:
+        console.print(f"[bold red]Ncrack installer failed or was cancelled.[/bold red]")
+        console.print(f"[italic]Error: {e}[/italic]")
+        console.print("[yellow]Please try installing Ncrack manually from nmap.org/ncrack/dist.[/yellow]")
+        return False, None
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred while running the installer:[/bold red] {e}")
+        console.print("[yellow]Please try installing Ncrack manually from nmap.org/ncrack/dist.[/yellow]")
+        return False, None
+
+
+def perform_bruteforce(target_ip: str, port: str, service_module: str, user_list_path: str, pass_list_path: str, ncrack_path: str) -> tuple[bool, str]:
+    """
+    Performs a brute-force attack using Ncrack against a specified service.
+    Uses the recommended 'service://target_ip:port' syntax for Ncrack.
+    Handles Ncrack execution and live output.
+    Args:
+        target_ip: The target IP address.
+        port: The target port number as a string.
+        service_module: The Ncrack service module (e.g., 'ssh', 'smb').
+        user_list_path: Path to the username wordlist.
+        pass_list_path: Path to the password wordlist.
+        ncrack_path: The full path to the Ncrack executable.
+    Returns:
+        A tuple of (bool, str) where bool is True if Ncrack command was
+        successfully *executed* (regardless of credentials found), and str
+        is the output or an error message.
+    """
+    if not ncrack_path or not os.path.exists(ncrack_path):
+        return False, f"Error: Ncrack executable not found at '{ncrack_path}'. Cannot perform brute-force."
+
+    service_target = f"{service_module}://{target_ip}:{port}" 
+
+    ncrack_command = [
+        ncrack_path,
+        "-U", user_list_path,
+        "-P", pass_list_path,
+        service_target, 
+        "-vv",
+        "-T4",
+        "--connection-limit", "5"
+    ]
+
+    full_command_str = ' '.join(ncrack_command)
+    print(f"Executing Ncrack command: {full_command_str}")
+    
+    try:
+        process = subprocess.Popen(ncrack_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+
+        found_credentials = False
+        live_output = []
+        
+        while True:
+            output_line = process.stdout.readline()
+            if output_line == '' and process.poll() is not None:
+                break
+            if output_line:
+                live_output.append(output_line.strip())
+                print(output_line.strip())
+                if "Discovered credentials" in output_line:
+                    found_credentials = True
+
+        stdout, stderr = process.communicate()
+        live_output.extend([line.strip() for line in stdout.splitlines() if line.strip()])
+        live_output.extend([line.strip() for line in stderr.splitlines() if line.strip()])
+
+        final_output_str = "\n".join(live_output)
+        
+        if process.returncode != 0:
+            error_message = f"Ncrack exited with error code: {process.returncode}\nStderr: {stderr}"
+            print(f"Ncrack error: {error_message}")
+            return False, final_output_str + "\n" + error_message
+
+        if found_credentials:
+            print("[bold green]Credentials found during brute-force![/bold green]")
+        else:
+            print("[bold yellow]No credentials found.[/bold yellow]")
+        
+        return True, final_output_str
+
+    except FileNotFoundError:
+        return False, f"Error: Ncrack executable not found at '{ncrack_path}'. Please ensure it's installed and accessible."
+    except Exception as e:
+        error_message = f"An unexpected error occurred during Ncrack brute-force: {e}"
+        print(f"[bold red]Critical error during Ncrack execution:[/bold red] {error_message}")
+        if 'process' in locals() and process.poll() is None:
+            process.terminate()
+            process.wait()
+        return False, error_message
+
+
+def run_escalation_flow(check_prereqs=False, get_prereqs=False, cleanup_flag=False, capture_output=True) -> tuple[bool, str]:
+    """Checks for Nmap and runs it to scan for open ports, then offers brute-force."""
+    global simulation_actions
+
+    # --- Initial check for flags ---
+    if check_prereqs:
+        return True, "Checking prerequisites: Ensure Nmap and Ncrack are installed."
+    if get_prereqs:
+        console.print("[yellow]Attempting automated Nmap and Ncrack installation if not found...[/yellow]")
+        return False, "Installation will be attempted in the main flow."
+    if cleanup_flag:
+        cleanup()
+        return True, "Cleanup completed."
+
+    # --- Nmap Check and Scan ---
+    nmap_path = None
+    found_nmap, nmap_path = is_nmap_installed()
+    if not found_nmap:
+        console.print("[bold yellow]Nmap not found. Attempting automatic installation...[/bold yellow]")
+        found_nmap, nmap_path = install_nmap()
+        if not found_nmap:
+            console.print("[bold red]Nmap installation failed. Escalation flow cannot continue.[/bold red]")
+            pause()
+            return False, "Nmap installation failed. Escalation flow cannot continue."
+
+    if not nmap_path:
+        console.print("[bold red]Nmap executable path could not be determined. Escalation flow cannot continue.[/bold red]")
+        pause()
+        return False, "Nmap executable path not determined."
+
+    target_ip = get_local_ip()
+    console.print(f"\n[bold yellow]Running Nmap scan on {target_ip}...[/bold yellow]")
+
+    open_ports_info = []
+    try:
+        nmap_command = [nmap_path, "-p-", "-sV", target_ip]
+        result = subprocess.run(
+            nmap_command,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        port_service_matches = re.findall(r"(\d+)/tcp\s+open\s+([a-zA-Z0-9_-]+)", result.stdout)
+        
+        
+        for port, service in port_service_matches:
+            open_ports_info.append({"port": int(port), "service": service})
+        
+        
+        open_ports_info.sort(key=lambda x: x["port"])
+
+        if open_ports_info:
+            ports_str_display = ", ".join([f"{p['port']} ({p['service']})" for p in open_ports_info])
+            output = f"Nmap scan completed on {target_ip}. Open ports: {ports_str_display}"
+        else:
+            output = f"Nmap scan completed on {target_ip}. No open ports found."
+        
+        console.print(output)
+        scan_success = True
+    except subprocess.CalledProcessError as e:
+        output = f"Nmap scan failed:\n{e.stderr}"
+        scan_success = False
+        console.print(f"[bold red]Nmap scan error:[/bold red] {output}")
+    except FileNotFoundError:
+        output = f"Nmap executable not found at path: {nmap_path}"
+        scan_success = False
+        console.print(f"[bold red]Error:[/bold red] {output}")
+    except Exception as e:
+        output = f"An unexpected error occurred during Nmap scan: {e}"
+        scan_success = False
+        console.print(f"[bold red]An unexpected Nmap error occurred:[/bold red] {output}")
+
+    if not scan_success:
+        pause()
+        return False, output
+
+    
+    if open_ports_info:
+        while True:
+            console.print("\n[bold]Choose an action:[/bold]")
+            console.print("[bold cyan]1.[/bold cyan] Continue with a specific port (Brute-force / further actions)")
+            console.print("[bold cyan]2.[/bold cyan] Perform Cleanup")
+            console.print("[bold cyan]0.[/bold cyan] Go back to main menu")
+
+            action_choice = IntPrompt.ask("Enter your choice", choices=["0", "1", "2"], default=0)
+
+            if action_choice == 1:
+                table = Table(title="Available Open Ports")
+                table.add_column("No.", style="cyan", no_wrap=True)
+                table.add_column("Port", style="magenta")
+                table.add_column("Service", style="green")
+
+                for i, port_info in enumerate(open_ports_info):
+                    table.add_row(str(i + 1), str(port_info["port"]), port_info["service"])
+                
+                console.print(table)
+
+                port_choice_str = Prompt.ask("Select a port number (1-{}) or 0 to go back".format(len(open_ports_info)), default="0")
+                try:
+                    port_choice_idx = int(port_choice_str)
+                    if port_choice_idx == 0:
+                        continue
+                    elif 1 <= port_choice_idx <= len(open_ports_info):
+                        selected_port_info = open_ports_info[port_choice_idx - 1]
+                        selected_port = str(selected_port_info["port"])
+                        selected_service_nmap = selected_port_info["service"]
+                        console.print(f"[italic]Selected port: {selected_port}, Service: {selected_service_nmap}[/italic]")
+
+                        ncrack_service_map = {
+                            "ssh": "ssh",
+                            "ftp": "ftp",
+                            "telnet": "telnet",
+                            "http": "http",
+                            "https": "https",
+                            "microsoft-ds": "smb",
+                            "netbios-ssn": "smb",
+                            "ms-wbt-server": "rdp",
+                        }
+                        
+                        selected_service_ncrack = ncrack_service_map.get(selected_service_nmap.lower())
+                        
+                        if not selected_service_ncrack:
+                            console.print(f"[bold red]No Ncrack module found for service: '{selected_service_nmap}'.[/bold red]")
+                            console.print("[yellow]Brute-force cannot proceed for this service. Please select another port/service.[/yellow]")
+                            pause()
+                            continue
+                        
+                        console.print(f"[italic]Mapped Nmap service '{selected_service_nmap}' to Ncrack module: '{selected_service_ncrack}'[/italic]")
+
+                        # Ncrack Installation Check
+                        ncrack_path = None
+                        found_ncrack, ncrack_path = is_ncrack_installed()
+                        if not found_ncrack:
+                            console.print("[bold yellow]Ncrack not found. Attempting automatic installation...[/bold yellow]")
+                            found_ncrack, ncrack_path = install_ncrack()
+                            if not found_ncrack:
+                                console.print("[bold red]Ncrack not available. Brute-force cannot proceed.[/bold red]")
+                                pause()
+                                return False, "Ncrack installation failed."
+                        
+                        if not ncrack_path:
+                            console.print("[bold red]Ncrack executable path could not be determined. Brute-force cannot proceed.[/bold red]")
+                            pause()
+                            return False, "Ncrack executable path not determined."
+
+                        
+                        console.print("\n[bold]Brute-force Wordlists Configuration:[/bold]")
+
+                        # Get the directory of the current script
+                        script_current_dir = os.path.dirname(os.path.abspath(__file__))
+                        
+                        
+                        default_wordlists_dir = os.path.join(script_current_dir, "wordlists")
+                        
+                        default_user_list_path = os.path.join(default_wordlists_dir, "common_users.txt")
+                        default_pass_list_path = os.path.join(default_wordlists_dir, "common_passwords.txt")
+
+                        # Prompt the user, suggesting the default paths
+                        user_list_path = Prompt.ask(
+                            f"Enter the full path to your username wordlist (default: [cyan]{default_user_list_path}[/cyan])",
+                            default=default_user_list_path
+                        )
+                        pass_list_path = Prompt.ask(
+                            f"Enter the full path to your password wordlist (default: [cyan]{default_pass_list_path}[/cyan])",
+                            default=default_pass_list_path
+                        )
+                        
+                        if not os.path.exists(user_list_path):
+                            console.print(f"[bold red]Error: Username wordlist not found at {user_list_path}. Returning to action menu.[/bold red]")
+                            pause()
+                            continue
+                        if not os.path.exists(pass_list_path):
+                            console.print(f"[bold red]Error: Password wordlist not found at {pass_list_path}. Returning to action menu.[/bold red]")
+                            pause()
+                            continue
+
+                        # --- Perform Brute-force ---
+                        bf_success, bf_output = perform_bruteforce(
+                            target_ip,
+                            selected_port,
+                            selected_service_ncrack,
+                            user_list_path,
+                            pass_list_path,
+                            ncrack_path
+                        )
+
+                        simulation_actions.append(f"Brute-force attempt on {selected_service_ncrack}@{target_ip}:{selected_port} {'succeeded' if bf_success else 'failed'}")
+                        console.print(f"\n[bold]{'Brute-force Succeeded!' if bf_success else 'Brute-force Failed.'}[/bold]")
+                        console.print(f"[italic]Output from Ncrack:[/italic]\n{bf_output}")
+                        
+                        pause()
+                        return True, "Brute-force flow completed."
+                    else:
+                        console.print("[red]Invalid port number. Please choose a number from the list or 0 to go back.[/red]")
+                except ValueError:
+                    console.print("[red]Invalid input. Please enter a number.[/red]")
+                
+            elif action_choice == 2:
+                cleanup()
+                pause()
+                return True, "Cleanup initiated by user."
+            
+            elif action_choice == 0:
+                return True, "User chose to go back from escalation flow."
+            
+            else:
+                console.print("[yellow]Invalid action choice. Please try again.[/yellow]")
+
+    else:
+        console.print("\n[bold]No open ports found. Choose an action:[/bold]")
+        console.print("[bold cyan]1.[/bold cyan] Perform Cleanup")
+        console.print("[bold cyan]0.[/bold cyan] Go back to main menu")
+
+        action_choice = IntPrompt.ask("Enter your choice", choices=["0", "1"], default=0)
+        if action_choice == 1:
+            cleanup()
+            pause()
+            return True, "Cleanup initiated by user (no open ports found)."
+        elif action_choice == 0:
+            return True, "User chose to go back (no open ports found)."
+        else:
+            return False, "Invalid action choice."
+
+    return True, "Escalation flow completed."
 
 
 def list_playbooks_menu() -> None:
@@ -1126,24 +1773,41 @@ def configuration_menu() -> None:
         config = get_config()
         
         # Display current configuration
+        atomics_display = markup.escape(config.atomics_path) if config.atomics_path else "[italic yellow]Not set[/italic]"
+        powershell_display = markup.escape(config.powershell_path) if config.powershell_path else "[italic yellow]Not set (using default)[/italic]"
+        # Timeout is an int, no need to escape
+        phishing_site_display = markup.escape(config.phishing_site_path) if config.phishing_site_path else "[italic yellow]Not set[/italic]"
+        phishing_module_display = markup.escape(config.phishing_module_path) if config.phishing_module_path else "[italic yellow]Not set[/italic]"
+
         console.print("[bold]Current Configuration:[/bold]")
-        console.print(f"1. Atomics Path:    {config.atomics_path or '[italic yellow]Not set[/italic]'}")
-        console.print(f"2. PowerShell Path: {config.powershell_path or '[italic yellow]Not set (using default)[/italic]'}")
+        console.print(f"1. Atomics Path:    {atomics_display}")
+        console.print(f"2. PowerShell Path: {powershell_display}")
         console.print(f"3. Command Timeout: {config.timeout} seconds")
+        console.print(f"4. Phishing Site Path:  {phishing_site_display}")
+        console.print(f"5. Phishing Module Path: {phishing_module_display}")
+
+        # Determine the base for option numbering
+        # Number of displayed config items + 1 for the first actual option
+        # Current config items: Atomics Path, PowerShell Path, Timeout, Phishing Site Path, Phishing Module Path (5 items)
+        # So, options start at 5 + 1 = 6
+        options_start_num = 6
+
         
         # Configuration options
         options = [
             "Set Atomics Path",
             "Set PowerShell Path",
             "Set Command Timeout",
+            "Set Phishing Site Path",
+            "Set Phishing Module Path", # New
             "Return to Main Menu"
         ]
         
         console.print("\n[bold]Options:[/bold]")
         for i, option in enumerate(options, 1):
-            console.print(f"[bold cyan]{i+3}.[/bold cyan] {option}") # Start numbering after current settings
+            console.print(f"[bold cyan]{options_start_num + i -1}.[/bold cyan] {option}")
         
-        choice = IntPrompt.ask("\nEnter number to modify or return", default=len(options)+3) # Default to return
+        choice = IntPrompt.ask("\nEnter number to modify or return", default=options_start_num + len(options) - 1) # Default to return
         
         if choice == 1: # Corresponds to Atomics Path display line
             # Corrected indentation
@@ -1204,7 +1868,7 @@ def configuration_menu() -> None:
                 console.print("[yellow]Timeout must be a positive number. Not changed.[/yellow]")
             pause()
         
-        elif choice == 4: # Set Atomics Path option
+        elif choice == options_start_num: # 6. Set Atomics Path option
             # Corrected indentation
             path = Prompt.ask(
                  "Enter the path to the atomic-red-team/atomics directory",
@@ -1232,7 +1896,7 @@ def configuration_menu() -> None:
             # Corrected indentation
             pause()
 
-        elif choice == 5: # Set PowerShell Path option
+        elif choice == options_start_num + 1: # 7. Set PowerShell Path option
             path = Prompt.ask(
                 "Enter the path to the PowerShell executable (e.g., 'powershell' or '/usr/bin/pwsh')",
                 default=config.powershell_path or "powershell"
@@ -1245,7 +1909,7 @@ def configuration_menu() -> None:
                 console.print("[yellow]PowerShell path not changed.[/yellow]")
             pause()
 
-        elif choice == 6: # Set Command Timeout option
+        elif choice == options_start_num + 2: # 8. Set Command Timeout option
             timeout = IntPrompt.ask(
                 "Enter the command timeout in seconds (e.g., 300)",
                 default=config.timeout,
@@ -1259,7 +1923,34 @@ def configuration_menu() -> None:
                 console.print("[yellow]Timeout must be a positive number. Not changed.[/yellow]")
             pause()
 
-        elif choice == 7: # Return to Main Menu option
+        elif choice == options_start_num + 3: # 9. Set Phishing Site Path option
+            path_str = Prompt.ask(
+                "Enter the path to your 'phishing_site' directory",
+                default=config.phishing_site_path or ""
+            ).strip()
+            if path_str:
+                phishing_path = Path(path_str)
+                if phishing_path.is_dir() and (phishing_path / "api" / "index.js").exists():
+                    set_config("phishing_site_path", str(phishing_path.resolve()))
+                    console.print(f"[bold green]Phishing site path set to:[/bold green] {phishing_path.resolve()}")
+                else:
+                    console.print(f"[bold red]Error:[/bold red] Path '{phishing_path}' does not seem to be a valid phishing_site directory (missing api/index.js).")
+            pause()
+        elif choice == options_start_num + 4: # 10. Set Phishing Module Path option
+            path_str = Prompt.ask(
+                "Enter the path to your 'phishing-module' directory (containing send_email.py)",
+                default=config.phishing_module_path or ""
+            ).strip()
+            if path_str:
+                module_path = Path(path_str)
+                if module_path.is_dir() and (module_path / "send_email.py").exists():
+                    set_config("phishing_module_path", str(module_path.resolve()))
+                    console.print(f"[bold green]Phishing module path set to:[/bold green] {module_path.resolve()}")
+                else:
+                    console.print(f"[bold red]Error:[/bold red] Path '{module_path}' does not seem to be a valid phishing-module directory (missing send_email.py).")
+            pause()
+
+        elif choice == options_start_num + 5: # 11. Return to Main Menu option
             break
         else:
             console.print("[red]Invalid choice.[/red]")
@@ -1365,6 +2056,546 @@ For more information, please refer to the documentation or visit the Atomic Red 
 
 [italic]Press Enter to return to the main menu.[/italic]
 """)
+    pause()
+
+
+def custom_test_menu() -> None:
+    """Display menu of available custom tests."""
+    print_header("Custom Tests")
+    
+    # Show available custom test options
+    console.print("[bold]Available Custom Tests:[/bold]")
+    console.print("1. Phishing Simulation")
+    console.print("2. ClickFix Simulation")
+    console.print("3. Escalation Flow Simulation")
+    console.print("4. Back to Run Test Menu")
+    
+    choice = IntPrompt.ask("Enter your choice", default=1)
+    
+    if choice == 1:
+        # Run phishing simulation
+        phishing_simulation_menu()
+    elif choice == 2:
+        # Run ClickFix simulation
+        clickfix_simulation_menu()
+    elif choice == 3:
+        # Run Escalation Flow simulation
+        run_escalation_flow()
+    elif choice == 4:
+        # Go back
+        return
+    else:
+        console.print("[bold red]Invalid choice.[/bold red]")
+        pause()
+        custom_test_menu()  # Show the menu again
+
+def check_phishing_prerequisites(verbose: bool = True) -> bool:
+    """Checks if all prerequisites for the phishing simulation are present."""
+    all_present = True
+    missing_prereqs: List[str] = []
+
+    if verbose:
+        console.print("\n[bold]Checking Phishing Simulation Prerequisites:[/bold]")
+
+    # 1. Check for Node.js
+    try:
+        result = subprocess.run(["node", "--version"], capture_output=True, text=True, check=True, shell=False, timeout=10)
+        if verbose:
+            console.print(f"[green]✓ Node.js found:[/green] {result.stdout.strip()}")
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        if verbose:
+            console.print("[bold red]✗ Node.js not found or 'node --version' failed.[/bold red] Node.js is required for the phishing website.")
+        all_present = False
+        missing_prereqs.append("Node.js")
+
+    # 2. Check for required Python packages using pip list
+    if verbose and REQUIRED_PYTHON_PACKAGES_PHISHING:
+        console.print("[bold]Checking Python packages:[/bold]")
+    
+    try:
+        # Get the list of installed packages using pip
+        pip_result = subprocess.run(
+            [sys.executable, "-m", "pip", "list", "--format=json"],
+            capture_output=True, text=True, check=True, shell=False, timeout=30
+        )
+        
+        # Parse the JSON output
+        installed_packages = {}
+        try:
+            packages_data = json.loads(pip_result.stdout)
+            for package in packages_data:
+                installed_packages[package['name'].lower()] = package['version']
+        except json.JSONDecodeError:
+            if verbose:
+                console.print("[yellow]Warning: Could not parse pip list output. Falling back to importlib.[/yellow]")
+            # Fall back to importlib if pip list JSON parsing fails
+            for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+                spec = importlib.util.find_spec(package_name)
+                if spec is None:
+                    if verbose:
+                        console.print(f"[bold red]✗ Python package '{package_name}' not found.[/bold red]")
+                    all_present = False
+                    missing_prereqs.append(f"Python package: {package_name}")
+                elif verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found.[/green]")
+            
+            # Skip the rest of the function since we already checked with importlib
+            if verbose:
+                if not all_present:
+                    console.print("\n[bold yellow]Some prerequisites are missing.[/bold yellow]")
+                else:
+                    console.print("\n[bold green]All phishing prerequisites appear to be present.[/bold green]")
+            return all_present
+        
+        # Check if required packages are installed
+        for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+            package_lower = package_name.lower().replace('-', '_')  # Convert to lowercase and handle potential dashes
+            alternative_name = package_name.lower().replace('_', '-')  # Try the opposite naming convention
+            
+            if package_lower in installed_packages:
+                if verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found (version: {installed_packages[package_lower]}).[/green]")
+            elif alternative_name in installed_packages:
+                if verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found as '{alternative_name}' (version: {installed_packages[alternative_name]}).[/green]")
+            else:
+                # Try a secondary check with importlib for packages that might be installed but named differently
+                spec = importlib.util.find_spec(package_name)
+                if spec is None:
+                    if verbose:
+                        console.print(f"[bold red]✗ Python package '{package_name}' not found.[/bold red]")
+                    all_present = False
+                    missing_prereqs.append(f"Python package: {package_name}")
+                elif verbose:
+                    console.print(f"[green]✓ Python package '{package_name}' found via importlib.[/green]")
+    
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+        if verbose:
+            console.print(f"[yellow]Warning: Could not run pip list command: {str(e)}. Falling back to importlib.[/yellow]")
+        
+        # Fall back to importlib if pip list fails
+        for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+            spec = importlib.util.find_spec(package_name)
+            if spec is None:
+                if verbose:
+                    console.print(f"[bold red]✗ Python package '{package_name}' not found.[/bold red]")
+                all_present = False
+                missing_prereqs.append(f"Python package: {package_name}")
+            elif verbose:
+                console.print(f"[green]✓ Python package '{package_name}' found via importlib.[/green]")
+    
+    if verbose:
+        if not all_present:
+            console.print("\n[bold yellow]Some prerequisites are missing.[/bold yellow]")
+        else:
+            console.print("\n[bold green]All phishing prerequisites appear to be present.[/bold green]")
+        
+    return all_present
+
+
+def install_phishing_prerequisites() -> None:
+    """Guides the user or attempts to install missing prerequisites for phishing simulation."""
+    console.print("\n[bold]Addressing Missing Phishing Simulation Prerequisites...[/bold]")
+    
+    # 1. Guide for Node.js
+    try:
+        subprocess.run(["node", "--version"], capture_output=True, text=True, check=True, shell=False, timeout=10)
+        console.print("[green]✓ Node.js seems to be installed.[/green]")
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        console.print("[bold yellow]Node.js is not installed or not found in PATH.[/bold yellow]")
+        console.print("  Please install Node.js manually from [link=https://nodejs.org/]https://nodejs.org/[/link]")
+        console.print("  After installation, ensure 'node' is available in your system's PATH and restart this CLI.")
+
+    # 2. Attempt to install Python packages
+    installed_any_python_package = False
+    if REQUIRED_PYTHON_PACKAGES_PHISHING:
+        console.print("\n[bold]Checking and installing Python packages via pip:[/bold]")
+
+    for package_name in REQUIRED_PYTHON_PACKAGES_PHISHING:
+        if importlib.util.find_spec(package_name) is None:
+            console.print(f"\n[yellow]Python package '{package_name}' is missing.[/yellow]")
+            if Confirm.ask(f"Attempt to install '{package_name}' using pip?", default=True):
+                console.print(f"[italic]Installing {package_name}...[/italic]")
+                try:
+                    console.print(f"[dim]Using Python interpreter for pip: {sys.executable}[/dim]") # Debug line added
+                    pip_command = [sys.executable, "-m", "pip", "install", package_name]
+                    result = subprocess.run(pip_command, capture_output=True, text=True, check=True, timeout=120)
+                    console.print(f"[green]✓ Successfully installed {package_name}.[/green]")
+                    if result.stdout.strip():
+                        console.print(f"[dim]Pip output:\n{result.stdout}[/dim]")
+                    installed_any_python_package = True
+                    importlib.invalidate_caches() # Invalidate import caches
+                except subprocess.CalledProcessError as e:
+                    console.print(f"[bold red]✗ Failed to install {package_name}.[/bold red]")
+                    error_output = e.stderr or e.stdout
+                    console.print(f"  Error: {error_output.strip() if error_output else 'No error output from pip.'}")
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    console.print("[bold red]✗ pip command failed or timed out. Ensure Python and pip are correctly installed and in PATH.[/bold red]")
+                    break 
+            else:
+                console.print(f"[yellow]Skipped installation of {package_name}.[/yellow]")
+        else:
+            console.print(f"[green]✓ Python package '{package_name}' is already installed.[/green]")
+
+    console.print("\n[bold]Prerequisite addressing process finished.[/bold]")
+    pause()
+
+def phishing_simulation_menu() -> None:
+    """Display the phishing simulation menu and execute the selected operation."""
+    print_header("Phishing Simulation")
+    
+    # Options for phishing simulation
+    options = [
+        "Execute Phishing Simulation",
+        "Check Prerequisites Only",
+        "Install Prerequisites",
+        "Cleanup After Simulation",
+        "Back to Custom Tests Menu"
+    ]
+    
+    for i, option in enumerate(options, 1):
+        console.print(f"[bold cyan]{i}.[/bold cyan] {option}")
+    
+    choice = IntPrompt.ask("\nEnter your choice", default=1)
+    
+    if choice == 1:
+        # Execute the simulation
+        run_phishing_simulation() # Actually run it
+        phishing_simulation_menu() # Then return to menu
+    elif choice == 2:
+        # Check prerequisites
+        check_phishing_prerequisites(verbose=True)
+        pause()
+        phishing_simulation_menu()
+    elif choice == 3:
+        # Install prerequisites
+        install_phishing_prerequisites()
+        # install_phishing_prerequisites already has a pause
+        phishing_simulation_menu()
+    elif choice == 4:
+        # Cleanup
+        cleanup_phishing_simulation()
+        phishing_simulation_menu()
+    elif choice == 5:
+        # Go back
+        custom_test_menu()
+        return
+    else:
+        console.print("[bold red]Invalid choice.[/bold red]")
+        pause()
+        phishing_simulation_menu()  # Show the menu again
+
+
+def run_phishing_simulation() -> None:
+    """Executes the phishing simulation."""
+    global PHISHING_SERVER_PROCESS
+    print_header("Executing Phishing Simulation")
+
+    config = get_config()
+    phishing_site_dir_str = config.phishing_site_path
+    phishing_module_dir_str = config.phishing_module_path # New
+    
+    console.print("[italic]Checking prerequisites before starting simulation...[/italic]")
+    if not check_phishing_prerequisites(verbose=False): # Keep this check less verbose initially
+        console.print("[bold red]✗ Prerequisites for phishing simulation are not met.[/bold red]")
+        if Confirm.ask("Do you want to view details and attempt to install/address them now?", default=True):
+            # Show detailed check
+            check_phishing_prerequisites(verbose=True) 
+            install_phishing_prerequisites() # This function includes its own prompts and pause
+            
+            console.print("[italic]Re-checking prerequisites after installation attempt...[/italic]")
+            if not check_phishing_prerequisites(verbose=True):
+                console.print("[bold red]Prerequisites are still not met. Aborting simulation.[/bold red]")
+                pause()
+                return
+            console.print("[bold green]Prerequisites now seem to be met. Proceeding with simulation...[/bold green]")
+            # A short pause to acknowledge before continuing
+            time.sleep(1)
+        else:
+            console.print("[yellow]Phishing simulation aborted due to missing prerequisites.[/yellow]")
+            pause()
+            return
+
+    if not phishing_site_dir_str:
+        console.print("[bold red]Phishing site path is not configured.[/bold red]")
+        console.print("Please set it in the Configuration menu.")
+        pause()
+        return
+    
+    if not phishing_module_dir_str: # New check
+        console.print("[bold red]Phishing module path is not configured.[/bold red]")
+        console.print("Please set it in the Configuration menu (path to directory containing send_email.py).")
+        pause()
+        return
+
+    phishing_site_dir = Path(phishing_site_dir_str)
+    api_dir = phishing_site_dir / "api"
+    log_dir = phishing_site_dir / "logs"
+    credential_log_file = log_dir / "detailed_credentials.json"
+
+    if not (api_dir.is_dir() and (api_dir / "index.js").exists()):
+        console.print(f"[bold red]Invalid phishing_site_path: '{phishing_site_dir}'. 'api/index.js' not found.[/bold red]")
+        pause()
+        return
+
+    phishing_module_dir = Path(phishing_module_dir_str) # New
+    email_script_path = phishing_module_dir / "send_email.py" # New
+    if not email_script_path.exists():
+        console.print(f"[bold red]Email sending script not found at '{email_script_path}'. Check Phishing Module Path configuration.[/bold red]")
+        pause()
+        return
+
+    # Ensure logs directory exists
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Start the Node.js phishing server
+    if PHISHING_SERVER_PROCESS and PHISHING_SERVER_PROCESS.poll() is None:
+        console.print("[yellow]Phishing server already seems to be running.[/yellow]")
+    else:
+        console.print(f"[italic]Starting phishing website server from {api_dir}...[/italic]")
+        try:
+            # For Windows, shell=True might be needed if 'node' is a .cmd or .bat file,
+            # but it's generally safer to ensure 'node' is directly executable.
+            # shell=False is preferred.
+            PHISHING_SERVER_PROCESS = subprocess.Popen(
+                ["node", "index.js"],
+                cwd=api_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                shell=sys.platform == "win32" # Use shell=True on Windows if node is a script/batch file
+            )
+            console.print("[green]✓ Phishing server started in background (PID: {PHISHING_SERVER_PROCESS.pid}).[/green]")
+            console.print("  URL: [link=http://localhost:3000/microsoft_login.html]http://localhost:3000/microsoft_login.html[/link]")
+            console.print("  KEA URL: [link=http://localhost:3000/kea_microsoft_login.html]http://localhost:3000/kea_microsoft_login.html[/link]")
+            time.sleep(3) # Give server a moment to start
+            if PHISHING_SERVER_PROCESS.poll() is not None: # Check if it exited immediately
+                stderr_output = PHISHING_SERVER_PROCESS.stderr.read() if PHISHING_SERVER_PROCESS.stderr else "No stderr."
+                raise Exception(f"Server failed to start. Exit code: {PHISHING_SERVER_PROCESS.returncode}. Stderr: {stderr_output}")
+        except Exception as e:
+            console.print(f"[bold red]✗ Failed to start phishing server: {e}[/bold red]")
+            PHISHING_SERVER_PROCESS = None
+            pause()
+            return
+
+    # 2. Run the email sending script (placeholder)
+    console.print("\n[italic]Executing email sending script...[/italic]")
+    try:
+        # The user's send_email.py handles its own config for recipients and template.
+        # The phishing_url is displayed when the server starts; user must ensure their template uses it.
+        # target_email = Prompt.ask("Enter target email address for the phishing test", default="victim@example.com") # Not used by user's script
+        # phishing_url = "http://localhost:3000/microsoft_login.html" # Displayed when server starts
+        
+        console.print(f"  [dim]Your email script '{email_script_path.name}' will use its own configuration (recipients, template).[/dim]")
+        console.print(f"  [dim]Ensure your email template points to the phishing URLs displayed above.[/dim]")
+        email_script_command = [sys.executable, str(email_script_path)]
+        email_result = subprocess.run(email_script_command, capture_output=True, text=True, check=True, timeout=120, cwd=phishing_module_dir) # Added cwd
+        console.print(f"[green]✓ Email sending script executed.[/green]\n[dim]{email_result.stdout}[/dim]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[bold red]✗ Email sending script failed: {e.stderr or e.stdout}[/bold red]")
+    except Exception as e:
+        console.print(f"[bold red]✗ Error running email sending script: {e}[/bold red]")
+
+    # 3. Monitor for credentials
+    last_known_creds_count = 0
+    if credential_log_file.exists(): # Get initial count if file exists
+        with open(credential_log_file, "r", encoding='utf-8') as f_init:
+            content_init = f_init.read().strip()
+            if content_init:
+                try:
+                    # With our backend changes, this should now be a valid JSON array
+                    current_creds_objects_init = json.loads(content_init)
+                    if isinstance(current_creds_objects_init, list):
+                        last_known_creds_count = len(current_creds_objects_init)
+                    else:
+                        # Fallback for possibly not-yet-converted files
+                        json_records = '[' + content_init.rstrip(',') + ']'
+                        current_creds_objects_init = json.loads(json_records)
+                        last_known_creds_count = len(current_creds_objects_init)
+                    
+                    console.print(f"[dim]Found {last_known_creds_count} existing credential entries[/dim]")
+                except json.JSONDecodeError as e:
+                    # Fallback to basic counting if JSON parsing fails
+                    # Fix the Rich markup by ensuring all tags are balanced
+                    console.print(f"[yellow dim]Warning: Couldn't parse credentials file as JSON: {str(e)}[/yellow dim]")
+                    potential_creds_str_init = [s for s in content_init.split('},') if s.strip()]
+                    last_known_creds_count = len(potential_creds_str_init)
+                    console.print(f"[dim]Found approximately {last_known_creds_count} existing credential entries[/dim]")
+
+    console.print(f"\n[cyan]Monitoring for credentials in '{credential_log_file}'... Press Ctrl+C to stop.[/cyan]")
+    try:
+        while True:
+            if credential_log_file.exists():
+                with open(credential_log_file, "r", encoding='utf-8') as f:
+                    content = f.read().strip()
+                
+                if not content:
+                    time.sleep(5)
+                    continue
+
+                try:
+                    # Parse the content as a proper JSON array
+                    current_creds_objects = json.loads(content)
+                    
+                    # Make sure it's a list
+                    if not isinstance(current_creds_objects, list):
+                        # Try the old format conversion as fallback
+                        json_records = '[' + content.rstrip(',') + ']'
+                        current_creds_objects = json.loads(json_records)
+                    
+                    if len(current_creds_objects) > last_known_creds_count:
+                        new_creds_count = len(current_creds_objects) - last_known_creds_count
+                        console.print(f"\n[bold green]🎉 {new_creds_count} new credential(s) captured![/bold green]")
+                        
+                        for cred_obj in current_creds_objects[last_known_creds_count:]:
+                            email = cred_obj.get("credentials", {}).get("email", "N/A")
+                            # For safety, avoid printing password directly in a real tool or log it carefully
+                            # password = cred_obj.get("credentials", {}).get("password", "N/A") 
+                            ip = cred_obj.get("userInfo", {}).get("ipAddress", "N/A")
+                            ua = cred_obj.get("userInfo", {}).get("userAgent", "N/A")
+                            timestamp = cred_obj.get("timestamp", "Unknown time")
+                            console.print(f"  - [{timestamp}] Email: {email}, IP: {ip}, UserAgent: {ua}")
+                        
+                        last_known_creds_count = len(current_creds_objects)
+                except json.JSONDecodeError as e:
+                    # If JSON parsing fails, try the old method
+                    # Fix Rich markup formatting
+                    console.print(f"[yellow dim]Warning: JSON parsing error: {str(e)}[/yellow dim]")
+                    potential_creds_str = [s for s in content.split('},') if s.strip()]
+                    
+                    if len(potential_creds_str) > last_known_creds_count:
+                        new_creds_count = len(potential_creds_str) - last_known_creds_count
+                        console.print(f"\n[bold green]🎉 {new_creds_count} new credential(s) captured! (fallback detection)[/bold green]")
+                        last_known_creds_count = len(potential_creds_str)
+            
+            time.sleep(config.timeout / 60 if config.timeout > 60 else 5) # Check every 5 seconds, or more if timeout is long
+    
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped monitoring credentials.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[bold red]Error during credential monitoring: {e}[/bold red]")
+
+    console.print("\n[bold green]Phishing simulation completed.[/bold green]")
+    pause()
+
+
+def cleanup_phishing_simulation() -> None:
+    """Cleans up after a phishing simulation."""
+    global PHISHING_SERVER_PROCESS
+    print_header("Cleanup Phishing Simulation")
+
+    # 1. Stop the Node.js server
+    if PHISHING_SERVER_PROCESS and PHISHING_SERVER_PROCESS.poll() is None:
+        console.print(f"[italic]Stopping phishing server (PID: {PHISHING_SERVER_PROCESS.pid})...[/italic]")
+        try:
+            PHISHING_SERVER_PROCESS.terminate() # Send SIGTERM
+            PHISHING_SERVER_PROCESS.wait(timeout=10) # Wait for graceful shutdown
+            console.print("[green]✓ Phishing server terminated.[/green]")
+        except subprocess.TimeoutExpired:
+            console.print("[yellow]Phishing server did not terminate gracefully, killing...[/yellow]")
+            PHISHING_SERVER_PROCESS.kill() # Force kill
+            PHISHING_SERVER_PROCESS.wait()
+            console.print("[green]✓ Phishing server killed.[/green]")
+        except Exception as e:
+            console.print(f"[bold red]✗ Error stopping phishing server: {e}[/bold red]")
+        PHISHING_SERVER_PROCESS = None
+    else:
+        console.print("[yellow]Phishing server is not running or process info unavailable.[/yellow]")
+
+    # 2. Offer to clear log files
+    config = get_config()
+    if config.phishing_site_path:
+        log_dir = Path(config.phishing_site_path) / "logs"
+        if log_dir.is_dir():
+            if Confirm.ask(f"\nDo you want to clear log files in '{log_dir}'?", default=False):
+                try:
+                    for item in log_dir.iterdir():
+                        if item.is_file():
+                            item.unlink()
+                            console.print(f"  Deleted: {item.name}")
+                    console.print("[green]✓ Log files cleared.[/green]")
+                except Exception as e:
+                    console.print(f"[bold red]✗ Error clearing log files: {e}[/bold red]")
+        else:
+            console.print(f"[yellow]Log directory '{log_dir}' not found, cannot clear logs.[/yellow]")
+    else:
+        console.print("[yellow]Phishing site path not configured, cannot clear logs.[/yellow]")
+    
+    console.print("\n[bold green]Phishing simulation cleanup process finished.[/bold green]")
+    pause()
+
+
+def clickfix_simulation_menu() -> None:
+    """Display the ClickFix simulation menu and execute the simulation."""
+    print_header("ClickFix Simulation")
+    
+    console.print("[bold]ClickFix Simulation Options:[/bold]")
+    console.print("1. Run ClickFix Simulation")
+    console.print("2. Back to Custom Tests Menu")
+    
+    choice = IntPrompt.ask("Enter your choice", default=1)
+    
+    if choice == 1:
+        run_clickfix_simulation()
+        clickfix_simulation_menu()
+    elif choice == 2:
+        return
+    else:
+        console.print("[bold red]Invalid choice.[/bold red]")
+        pause()
+        clickfix_simulation_menu()
+
+
+def run_clickfix_simulation() -> None:
+    """Executes the ClickFix simulation by running the start_clickfix_flow.py script."""
+    print_header("Executing ClickFix Simulation")
+    
+    # Path to the ClickFix script
+    clickfix_script_path = Path("../clickfix_site/start_clickfix_flow.py")
+    
+    if not clickfix_script_path.exists():
+        console.print(f"[bold red]ClickFix script not found at: {clickfix_script_path}[/bold red]")
+        console.print("Please ensure the ClickFix site is properly set up.")
+        pause()
+        return
+    
+    console.print("[italic]Starting ClickFix simulation...[/italic]")
+    console.print("This will start the ClickFix website and send phishing emails.")
+    
+    if not Confirm.ask("Continue with ClickFix simulation?", default=True):
+        console.print("[yellow]ClickFix simulation cancelled.[/yellow]")
+        pause()
+        return
+    
+    try:
+        # Run the ClickFix script
+        result = subprocess.run(
+            [sys.executable, str(clickfix_script_path)],
+            cwd=clickfix_script_path.parent,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode == 0:
+            console.print("[bold green]✓ ClickFix simulation completed successfully![/bold green]")
+            if result.stdout:
+                console.print(f"\n[dim]Output:[/dim]\n{result.stdout}")
+        else:
+            console.print(f"[bold red]✗ ClickFix simulation failed with exit code {result.returncode}[/bold red]")
+            if result.stderr:
+                console.print(f"\n[dim]Error:[/dim]\n{result.stderr}")
+                
+    except subprocess.TimeoutExpired:
+        console.print("[bold red]✗ ClickFix simulation timed out after 5 minutes[/bold red]")
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped monitoring credentials.[/yellow]")
+
+    except Exception as e:
+        console.print(f"[bold red]✗ Error running ClickFix simulation: {e}[/bold red]")
+    
+    console.print("\n[italic]Note: The ClickFix website should now be running at http://localhost:3001/clickfix[/italic]")
+    console.print("[italic]Check the terminal output above for email sending results.[/italic]")
     pause()
 
 

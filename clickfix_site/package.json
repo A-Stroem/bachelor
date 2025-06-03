@@ -1,0 +1,12 @@
+{
+  "name": "clickfix_site",
+  "version": "1.0.0",
+  "description": "Basic web server for clickfix_site",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}

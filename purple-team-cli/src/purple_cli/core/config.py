@@ -15,6 +15,8 @@ DEFAULT_CONFIG = {
     "atomics_path": "",
     "powershell_path": "powershell",  # Default to system's PowerShell
     "timeout": 300,  # Default timeout in seconds
+    "phishing_site_path": "../phishing_site", # Added for phishing site
+    "phishing_module_path": "../phishing-module", # Added for phishing module
 }
 
 class AppConfig:
@@ -168,6 +170,46 @@ class AppConfig:
             seconds: Timeout for command execution in seconds.
         """
         self.update_setting("timeout", seconds)
+
+    @property
+    def phishing_site_path(self) -> Optional[str]:
+        """
+        Gets the path to the phishing_site directory.
+
+        Returns:
+            Path to the phishing_site directory, or None if not set.
+        """
+        return self.get_setting("phishing_site_path")
+
+    @phishing_site_path.setter
+    def phishing_site_path(self, path: Optional[str]) -> None:
+        """
+        Sets the path to the phishing_site directory.
+
+        Args:
+            path: Path to the phishing_site directory.
+        """
+        self.update_setting("phishing_site_path", path)
+
+    @property
+    def phishing_module_path(self) -> Optional[str]:
+        """
+        Gets the path to the phishing-module directory.
+
+        Returns:
+            Path to the phishing-module directory, or None if not set.
+        """
+        return self.get_setting("phishing_module_path")
+
+    @phishing_module_path.setter
+    def phishing_module_path(self, path: Optional[str]) -> None:
+        """
+        Sets the path to the phishing-module directory.
+
+        Args:
+            path: Path to the phishing-module directory.
+        """
+        self.update_setting("phishing_module_path", path)
 
 
 # Create a singleton instance of AppConfig
