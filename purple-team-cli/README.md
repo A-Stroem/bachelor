@@ -56,7 +56,10 @@ Launch PowerShell and run the following commands:
 ```powershell
 # Install the Invoke-AtomicRedTeam module
 IEX (IWR 'https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicredteam.ps1' -UseBasicParsing);
-Install-AtomicRedTeam -GetPrereqs -Force
+Install-AtomicRedTeam -GetPrereqs
+
+#Or Import the Module(Recommended)
+Install-Module -Name invoke-atomicredteam,powershell-yaml -Scope CurrentUser
 
 # Clone the Atomic Red Team repository
 git clone https://github.com/redcanaryco/atomic-red-team.git
@@ -76,12 +79,10 @@ python -m venv venv
 
 # Activate the virtual environment
 # On Windows:
-# venv\Scripts\activate
+venv\Scripts\Activate.ps1
 # On macOS/Linux:
 source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
 
 # Install the package in editable mode
 pip install -e .
